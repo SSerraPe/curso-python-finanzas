@@ -1,0 +1,159 @@
+#== md
+# 00 · Preparación: Colab y tus primeras líneas de Python
+
+**Tiempo estimado:** 45–60 minutos · **Cuándo:** antes de la sesión 1
+
+{{SOLUCIONES}}
+
+Este notebook sirve para que el primer día no perdamos tiempo con la configuración. Al terminarlo sabrás:
+
+1. Abrir y ejecutar un notebook en Google Colab.
+2. Qué hacer cuando aparece un error (spoiler: es normal y no se rompe nada).
+3. Usar variables, números y texto en Python.
+
+---
+## 1. ¿Qué es esto?
+
+Un **notebook** es un documento que mezcla **texto** (como este) y **celdas de código** que puedes ejecutar. Es como una hoja de Excel en la que, en lugar de fórmulas escondidas en las celdas, el cálculo está escrito y se lee de arriba abajo.
+
+**Google Colab** ejecuta el notebook en un servidor de Google, así que no tienes que instalar nada.
+
+### Guarda tu copia
+Antes de nada: **Archivo → Guardar una copia en Drive**. Así tus cambios se guardan en tu Google Drive y no se pierden.
+
+### Cómo ejecutar una celda
+Haz clic en la celda de código de abajo y pulsa **Shift + Enter** (o el botón ▶️ de la izquierda).
+
+#== code
+print("¡Hola, equipo de FP&A!")
+
+#== md
+Si ves el mensaje debajo de la celda, ya has ejecutado tu primer código en Python. 🎉
+
+**Atajos que vas a usar mucho:**
+
+| Acción | Atajo |
+|---|---|
+| Ejecutar celda y pasar a la siguiente | `Shift + Enter` |
+| Ejecutar celda y quedarte en ella | `Ctrl + Enter` |
+| Ejecutar todo el notebook | Menú *Entorno de ejecución → Ejecutar todas* |
+| Empezar de cero (borra la memoria) | Menú *Entorno de ejecución → Reiniciar sesión* |
+
+> 💡 **Regla de oro de los notebooks:** las celdas se ejecutan en el orden en que **tú** las ejecutas, no en el orden en que aparecen. Si algo se comporta raro, *Reiniciar sesión* y *Ejecutar todas*.
+
+---
+## 2. Python como calculadora
+
+Python entiende operaciones como Excel: `+ - * /`. La potencia es `**` (en Excel `^`).
+
+#== code
+1250 * 1.21        # precio con IVA
+
+#== code
+(100 - 72) / 100   # margen en tanto por uno
+
+#== code
+1.05 ** 3          # crecimiento compuesto 3 años al 5%
+
+#== md
+Lo que va detrás de `#` es un **comentario**: Python lo ignora. Úsalo para explicar *por qué* haces algo.
+
+---
+## 3. Variables: ponerle nombre a las cosas
+
+En Excel, el dato vive en la celda `B7` y hay que recordar qué era `B7`. En Python le damos un **nombre**:
+
+#== code
+prima = 480.0          # ingresos por la póliza (€)
+coste_siniestros = 350.0
+comision = prima * 0.15
+
+margen = prima - coste_siniestros - comision
+margen
+
+#== md
+Si ahora cambias `prima` y vuelves a ejecutar las celdas, el margen se recalcula. Es lo mismo que cambiar un input en Excel.
+
+**Reglas para los nombres:** minúsculas, palabras separadas por `_`, sin tildes ni espacios, y que expliquen lo que contienen: `prima_devengada` es mejor que `x` o `pd2`.
+
+---
+## 4. Texto y f-strings
+
+El texto (*string*) va entre comillas. Para mezclar texto y números se usan las **f-strings**: una `f` delante y las variables entre `{}`.
+
+#== code
+canal = "Agentes"
+print(f"El canal {canal} tiene un margen de {margen} €")
+print(f"Con formato de miles y 2 decimales: {margen:,.2f} €")
+print(f"Como porcentaje: {margen / prima:.1%}")
+
+#== md
+---
+## 5. Los errores son tus amigos
+
+Ejecuta la celda de abajo. Va a dar un **error** a propósito.
+
+#== code
+# Este error es intencionado: 'primas' (con s) no existe, la variable se llama 'prima'
+try:
+    print(primas)
+except NameError as e:
+    print("NameError:", e)
+
+#== md
+En la vida real verás un recuadro rojo con el texto `NameError: name 'primas' is not defined`. Cómo leerlo:
+
+1. **La última línea es la importante**: dice el *tipo* de error y el motivo.
+2. Encima se indica la línea donde ha fallado.
+3. Los errores más típicos al empezar son `NameError` (nombre mal escrito), `SyntaxError` (falta un paréntesis o unas comillas), `TypeError` (sumar texto con números) e `IndentationError` (espacios al principio de la línea).
+
+> 💡 Copiar el mensaje de error en Google (o preguntarle a un asistente de IA) suele dar la solución en segundos.
+
+---
+## 6. Tu turno ✏️
+
+Una póliza tiene una prima de **620 €**, ha tenido siniestros por **410 €**, la comisión del canal es del **18 %** y los gastos de gestión asignados son **35 €**.
+
+Calcula el `margen_poliza` y el `ratio_combinado` = (siniestros + comisión + gastos) / prima.
+
+Sustituye los `...` por tu código y ejecuta. La celda siguiente te dirá si está bien.
+
+#== code
+prima_ej = 620
+siniestros_ej = 410
+tasa_comision_ej = 0.18
+gastos_ej = 35
+
+# >>> ALUMNO
+# margen_poliza = ...
+# ratio_combinado = ...
+# <<< ALUMNO
+# >>> SOLUCION
+comision_ej = prima_ej * tasa_comision_ej
+margen_poliza = prima_ej - siniestros_ej - comision_ej - gastos_ej
+ratio_combinado = (siniestros_ej + comision_ej + gastos_ej) / prima_ej
+# <<< SOLUCION
+print(margen_poliza, ratio_combinado)
+
+#== code
+# Comprobación automática (no hace falta que entiendas este código todavía)
+import math
+if margen_poliza is ... or ratio_combinado is ...:
+    print("⏳ Completa el ejercicio de arriba")
+elif math.isclose(margen_poliza, 63.4) and math.isclose(ratio_combinado, 0.8977, rel_tol=1e-3):
+    print("✅ ¡Correcto! Margen 63,40 € y ratio combinado 89,8 %")
+else:
+    print("❌ Todavía no. 💡 La comisión es prima × tasa. El ratio combinado suma TODOS los costes.")
+
+#== md
+---
+## 7. Comprobación final
+
+Si has llegado hasta aquí, estás listo para la sesión 1. Antes de terminar:
+
+- [ ] He guardado una copia en mi Drive.
+- [ ] Sé ejecutar celdas y reiniciar la sesión.
+- [ ] Entiendo qué es una variable y una f-string.
+- [ ] He visto un error y sé leer su última línea.
+
+**Opcional, si te pica la curiosidad:** la página [*Comparison with spreadsheets*](https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_spreadsheets.html) de pandas muestra cómo se hace en Python lo que ya haces en Excel.

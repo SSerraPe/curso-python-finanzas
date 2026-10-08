@@ -1,0 +1,21 @@
+# Parámetros del cierre mensual. Cambiar aquí, NO en el código.
+periodo: "2025-09"            # mes a cerrar (AAAA-MM). Se puede sobrescribir con --periodo
+
+salidas:
+  carpeta: "output"           # se crea output/<periodo>/
+  excel: true
+  pdf: true
+  correos: true
+
+correo:
+  modo_simulacro: true        # true = guarda .eml; false = enviar (requiere configurar IT)
+  remitente: "fpa-autos@ejemplo.com"
+  destinatarios:              # responsables de canal (direcciones ficticias)
+    Agentes: ["dir.agentes@ejemplo.com"]
+    Corredores: ["dir.corredores@ejemplo.com"]
+    Directo: ["dir.directo@ejemplo.com"]
+    Bancaseguros: ["dir.bancaseguros@ejemplo.com"]
+  copia_direccion: ["direccion.financiera@ejemplo.com"]
+
+controles:
+  detener_si_ko: false        # true = no generar informes si algún control falla

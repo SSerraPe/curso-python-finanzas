@@ -1,0 +1,17 @@
+# Salidas generadas (se regeneran con los scripts)
+output/
+# Fuentes descargadas para regenerar datos
+data/_fuente_rda/
+# Entornos y cachés
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
+# Secretos: NUNCA al repositorio
+.env
+*.key
+# Ficheros temporales de Office
+~$*
+# Basura de macOS / R
+.DS_Store
+.Rhistory

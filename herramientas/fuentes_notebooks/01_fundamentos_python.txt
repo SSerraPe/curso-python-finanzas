@@ -1,0 +1,446 @@
+#== md
+# Sesión 1 · Python para quien viene de Excel
+
+**Objetivo:** leer y escribir código Python básico con ejemplos de finanzas y dar el primer paso con pandas.
+
+{{SOLUCIONES}}
+
+| Bloque | Contenido | Min |
+|---|---|---|
+| 1 | Tipos de datos y operaciones | 25 |
+| 2 | Listas, diccionarios, bucles y condicionales | 20 |
+| 3 | Funciones, módulos y buenas prácticas | 25 |
+| 4 | Primer contacto con pandas: el presupuesto | 25 |
+
+**Cómo usar este notebook:** lee, ejecuta (Shift+Enter) y, en los ejercicios ✏️, sustituye los `...` por tu código. La celda de comprobación te dirá ✅ o ❌ con una pista. Los ejercicios ⭐ son opcionales.
+
+#== setup
+
+#== code
+from curso_seguros.comprobar import comprobar
+
+#== md
+---
+# Bloque 1 · Tipos de datos y operaciones
+
+Todo valor en Python tiene un **tipo**. Los cuatro básicos:
+
+| Tipo | Ejemplo | En Excel sería… |
+|---|---|---|
+| `int` (entero) | `678013` | número sin decimales |
+| `float` (decimal) | `0.0742` | número con decimales |
+| `str` (texto) | `"Agentes"` | texto |
+| `bool` (lógico) | `True` / `False` | VERDADERO / FALSO |
+
+#== code
+n_polizas = 678013
+frecuencia = 0.0742
+canal = "Agentes"
+es_rentable = False
+
+print(type(n_polizas), type(frecuencia), type(canal), type(es_rentable))
+
+#== md
+### La cuenta de resultados de una póliza
+
+#== code
+prima = 480.00            # ingreso
+siniestros = 350.00       # coste de siniestros
+tasa_comision = 0.15      # 15 % de la prima para el intermediario
+gastos = 30.00            # gastos de estructura asignados
+
+comision = prima * tasa_comision
+margen = prima - siniestros - comision - gastos
+ratio_combinado = (siniestros + comision + gastos) / prima
+
+print(f"Comisión: {comision:,.2f} €")
+print(f"Margen técnico: {margen:,.2f} €")
+print(f"Ratio combinado: {ratio_combinado:.1%}")
+print(f"¿Es rentable? {margen > 0}")
+
+#== md
+### Comparaciones y lógica
+`>`, `<`, `>=`, `<=`, `==` (igual, **dos** signos), `!=` (distinto). Se combinan con `and`, `or`, `not`.
+
+#== code
+print(ratio_combinado < 1)                       # ¿ganamos dinero?
+print(canal == "Agentes" and ratio_combinado > 0.95)
+
+#== md
+### ⚠️ Los decimales no son exactos
+
+Esto pasa en **todos** los lenguajes, Excel incluido: los ordenadores guardan los decimales en binario y algunos no se pueden representar exactamente.
+
+#== code
+print(0.1 + 0.2)
+print(0.1 + 0.2 == 0.3)
+
+import math
+print(math.isclose(0.1 + 0.2, 0.3))    # la forma correcta de comparar decimales
+print(round(0.1 + 0.2, 2) == 0.3)      # o redondear antes
+
+#== md
+> 💡 **Para cuadres contables:** nunca compares totales con `==`. Usa `math.isclose(a, b, abs_tol=0.01)` (tolerancia de 1 céntimo). Lo usaremos en los controles de la sesión 3.
+
+### Conversiones entre tipos
+
+#== code
+importe_texto = "1250.75"        # p. ej. leído de un fichero
+importe = float(importe_texto)
+print(importe * 2)
+
+print(int(3.99))                 # ¡trunca, no redondea!
+print(round(3.99))
+print(str(2025) + "-09")          # juntar textos
+
+#== md
+### ✏️ Ejercicio 1.1
+Una póliza de **Bancaseguros** tiene prima **750 €**, siniestros **0 €**, comisión del **20 %** y gastos **40 €**. Calcula `margen_1` y escribe en `mensaje_1` un texto **exactamente** así: `Bancaseguros: margen 560.00 €` (usa una f-string con `:.2f`).
+
+#== code
+# >>> ALUMNO
+# margen_1 = ...
+# mensaje_1 = ...
+# <<< ALUMNO
+# >>> SOLUCION
+margen_1 = 750 - 0 - 750 * 0.20 - 40
+mensaje_1 = f"Bancaseguros: margen {margen_1:.2f} €"
+# <<< SOLUCION
+print(mensaje_1)
+
+#== code
+comprobar(margen_1, 560, "Margen = prima − siniestros − prima×comisión − gastos")
+comprobar(mensaje_1, "Bancaseguros: margen 560.00 €", "Revisa espacios y usa {margen_1:.2f}")
+
+#== md
+---
+# Bloque 2 · Listas, diccionarios, bucles y condicionales
+
+### Listas: una columna de datos
+Una lista es una colección **ordenada**, entre corchetes. Es como una columna de Excel.
+
+#== code
+primas_mes = [1_828_383, 2_299_273, 3_170_687, 3_420_323]   # ene-abr (el _ separa miles, solo estética)
+
+print(len(primas_mes))          # CONTAR
+print(sum(primas_mes))          # SUMA
+print(max(primas_mes), min(primas_mes))
+print(primas_mes[0])            # el PRIMER elemento es el 0 (¡no el 1!)
+print(primas_mes[-1])           # el último
+print(primas_mes[1:3])          # del índice 1 al 2 (el 3 no se incluye)
+
+primas_mes.append(3_743_113)    # añadir mayo
+print(primas_mes)
+
+#== md
+### Diccionarios: una fila con nombres de columna
+Un diccionario guarda pares **clave → valor**, entre llaves. Es como una fila con sus encabezados.
+
+#== code
+poliza = {"id": 1001, "canal": "Agentes", "prima": 480.0, "siniestros": 350.0}
+
+print(poliza["canal"])
+poliza["gastos"] = 30.0          # añadir una "columna"
+print(poliza)
+
+#== md
+### Una lista de diccionarios = una tabla
+Esta es nuestra **cartera mini**: 6 pólizas. (Mañana trabajaremos con 678.000; la lógica es la misma.)
+
+#== code
+cartera_mini = [
+    {"id": 1001, "canal": "Agentes",      "prima": 480.0, "siniestros": 350.0},
+    {"id": 1002, "canal": "Directo",      "prima": 310.0, "siniestros": 0.0},
+    {"id": 1003, "canal": "Corredores",   "prima": 655.0, "siniestros": 1_204.0},
+    {"id": 1004, "canal": "Agentes",      "prima": 520.0, "siniestros": 0.0},
+    {"id": 1005, "canal": "Bancaseguros", "prima": 290.0, "siniestros": 602.0},
+    {"id": 1006, "canal": "Directo",      "prima": 405.0, "siniestros": 0.0},
+]
+TASAS_COMISION = {"Agentes": 0.15, "Corredores": 0.18, "Directo": 0.02, "Bancaseguros": 0.20}
+
+#== md
+### Bucle `for`: repetir para cada fila
+La parte que se repite va **indentada** (4 espacios). La indentación no es estética: es lo que le dice a Python qué está dentro del bucle.
+
+#== code
+total_primas = 0
+for p in cartera_mini:
+    total_primas = total_primas + p["prima"]     # acumulador (también: total_primas += p["prima"])
+print(f"Primas totales: {total_primas:,.0f} €")
+
+#== md
+### Condicionales `if / elif / else`
+Equivalente al `SI()` de Excel, pero mucho más legible cuando hay varios casos.
+
+#== code
+for p in cartera_mini:
+    comision = p["prima"] * TASAS_COMISION[p["canal"]]
+    margen = p["prima"] - p["siniestros"] - comision
+    if margen < 0:
+        etiqueta = "🔴 pérdida"
+    elif margen < 0.1 * p["prima"]:
+        etiqueta = "🟡 margen bajo"
+    else:
+        etiqueta = "🟢 rentable"
+    print(f'{p["id"]} {p["canal"]:<13} margen {margen:>9,.2f} €  {etiqueta}')
+
+#== md
+### Agrupar con un diccionario (un "SUMAR.SI" a mano)
+
+#== code
+primas_por_canal = {}
+for p in cartera_mini:
+    c = p["canal"]
+    primas_por_canal[c] = primas_por_canal.get(c, 0) + p["prima"]
+primas_por_canal
+
+#== md
+> En el bloque 4 veremos que pandas hace esto en **una línea**. Aun así conviene entender qué ocurre por debajo.
+
+### ✏️ Ejercicio 2.1
+Recorre `cartera_mini` y calcula:
+- `n_perdidas`: número de pólizas con margen < 0 (margen = prima − siniestros − comisión)
+- `importe_perdidas`: suma de los márgenes negativos (será un número negativo)
+
+#== code
+# >>> ALUMNO
+# n_perdidas = 0
+# importe_perdidas = 0
+# for p in cartera_mini:
+#     ...
+# <<< ALUMNO
+# >>> SOLUCION
+n_perdidas = 0
+importe_perdidas = 0
+for p in cartera_mini:
+    margen = p["prima"] - p["siniestros"] - p["prima"] * TASAS_COMISION[p["canal"]]
+    if margen < 0:
+        n_perdidas += 1
+        importe_perdidas += margen
+# <<< SOLUCION
+print(n_perdidas, importe_perdidas)
+
+#== code
+comprobar(n_perdidas, 2, "Usa la tasa de comisión de cada canal: TASAS_COMISION[p['canal']]")
+comprobar(importe_perdidas, -1036.9, "Suma solo los márgenes que sean negativos")
+
+#== md
+⭐ **Opcional:** las *list comprehensions* permiten escribir un bucle en una línea. Intenta entender esta:
+
+#== code
+primas_directo = [p["prima"] for p in cartera_mini if p["canal"] == "Directo"]
+primas_directo
+
+#== md
+---
+# Bloque 3 · Funciones, módulos y buenas prácticas
+
+### Funciones: escribir la lógica UNA vez
+Si copias y pegas la misma fórmula en 3 sitios, tarde o temprano se te olvidará cambiar una. Una **función** encapsula un cálculo con un nombre.
+
+#== code
+def margen_tecnico(prima, siniestros, tasa_comision=0.15, gastos=0.0):
+    """Margen técnico de una póliza o segmento (en €).
+
+    prima - siniestros - comisiones - gastos de estructura.
+    tasa_comision tiene un valor por defecto del 15 %.
+    """
+    comision = prima * tasa_comision
+    return prima - siniestros - comision - gastos
+
+
+print(margen_tecnico(480, 350))                         # usa la comisión por defecto
+print(margen_tecnico(480, 350, tasa_comision=0.02))     # argumento con nombre: más legible
+help(margen_tecnico)
+
+#== md
+Partes de una función:
+- `def nombre(argumentos):` y el cuerpo indentado.
+- **docstring** (texto entre `"""`): explica qué hace. Es lo que muestra `help()`.
+- `return`: lo que devuelve. Sin `return`, la función devuelve `None`.
+
+Una función puede recibir y devolver cualquier cosa, por ejemplo un diccionario:
+
+#== code
+def cuenta_resultados(poliza, tasas=TASAS_COMISION, gastos=30.0):
+    """Devuelve la cuenta de resultados de una póliza (dict) como otro dict."""
+    comision = poliza["prima"] * tasas[poliza["canal"]]
+    margen = margen_tecnico(poliza["prima"], poliza["siniestros"], tasas[poliza["canal"]], gastos)
+    return {"id": poliza["id"], "ingresos": poliza["prima"], "siniestros": poliza["siniestros"],
+            "comision": comision, "gastos": gastos, "margen": margen}
+
+
+cuenta_resultados(cartera_mini[2])
+
+#== md
+### ✏️ Ejercicio 3.1
+Escribe una función `ratio_combinado(prima, siniestros, comision, gastos)` que devuelva (siniestros + comisión + gastos) / prima. Si la prima es 0, debe devolver `None` (para no dividir por cero).
+
+#== code
+# >>> ALUMNO
+# def ratio_combinado(prima, siniestros, comision, gastos):
+#     ...
+# <<< ALUMNO
+# >>> SOLUCION
+def ratio_combinado(prima, siniestros, comision, gastos):
+    """Ratio combinado = costes totales / prima. None si la prima es 0."""
+    if prima == 0:
+        return None
+    return (siniestros + comision + gastos) / prima
+# <<< SOLUCION
+
+#== code
+comprobar(ratio_combinado(500, 300, 75, 25), 0.8, "(siniestros + comisión + gastos) / prima")
+comprobar(ratio_combinado(0, 10, 0, 0) is None, True, "Añade un if prima == 0: return None")
+
+#== md
+### Módulos: no reinventar la rueda
+Un **módulo** es un fichero `.py` con funciones. Python trae muchos y se cargan con `import`.
+
+#== code
+import math
+from datetime import date
+
+print(math.sqrt(26444))                       # raíz cuadrada
+
+# ¿Qué parte de la prima anual está devengada a 30/09 para una póliza con efecto 15/03?
+efecto, cierre = date(2025, 3, 15), date(2025, 9, 30)
+dias = (cierre - efecto).days
+print(dias, f"{dias / 365:.1%} de la prima devengada")
+
+#== md
+También podemos importar **nuestras propias funciones**. El curso incluye un paquete en `src/curso_seguros/` que iremos usando:
+
+#== code
+from curso_seguros.kpis import ic_frecuencia
+help(ic_frecuencia)
+
+#== md
+### Buenas prácticas: el mismo cálculo, dos estilos
+
+❌ **Así no**: nombres crípticos, números mágicos y lógica repetida.
+```python
+a = 480; b = 350
+c = a - b - a*0.15 - 30
+d = 520; e = 0
+f = d - e - d*0.15 - 30
+```
+
+✅ **Así sí**: nombres que se explican solos, constantes con nombre y una función reutilizable.
+```python
+TASA_COMISION_AGENTES = 0.15
+GASTO_POR_POLIZA = 30.0
+
+def margen_tecnico(prima, siniestros, tasa_comision, gastos):
+    return prima - siniestros - prima * tasa_comision - gastos
+
+margen_1001 = margen_tecnico(480, 350, TASA_COMISION_AGENTES, GASTO_POR_POLIZA)
+```
+
+**Checklist de estilo (PEP 8, la guía oficial):**
+1. `nombres_en_minusculas_con_guiones_bajos` para variables y funciones; `MAYUSCULAS` para constantes.
+2. Una función hace **una** cosa y su nombre lo dice.
+3. Si copias y pegas código por tercera vez, conviértelo en función.
+4. Los comentarios explican el **porqué**, no el qué.
+5. Nada de contraseñas ni rutas personales dentro del código (lo veremos en la sesión 3).
+
+---
+# Bloque 4 · Primer contacto con pandas: el presupuesto
+
+**pandas** es la librería para trabajar con tablas (*DataFrames*). Por convención se importa como `pd`.
+
+El presupuesto 2025 está en `data/entrada/presupuesto_2025.xlsx`. Ábrelo mentalmente: tiene un título en la fila 1, una fila vacía y los encabezados en la **fila 3**. Por eso usamos `header=2` (pandas cuenta desde 0).
+
+#== code
+import pandas as pd
+
+ppto = pd.read_excel("data/entrada/presupuesto_2025.xlsx", header=2)
+ppto.head()            # primeras 5 filas
+
+#== code
+print(ppto.shape)      # (filas, columnas)
+ppto.columns.tolist()
+
+#== md
+### Seleccionar y filtrar
+
+| Excel | pandas |
+|---|---|
+| Seleccionar una columna | `df["Total"]` |
+| Varias columnas | `df[["canal", "concepto", "Total"]]` |
+| Autofiltro | `df[df["canal"] == "Directo"]` |
+| Filtro con dos condiciones | `df[(df["canal"] == "Directo") & (df["Total"] > 1e6)]` |
+| Ordenar | `df.sort_values("Total", ascending=False)` |
+
+#== code
+ppto[ppto["concepto"] == "Primas devengadas"][["canal", "Total"]]
+
+#== code
+# Dos condiciones: cada una entre paréntesis y unidas con & (y) o | (o)
+ppto[(ppto["canal"] == "Directo") & (ppto["concepto"] != "Primas devengadas")]
+
+#== md
+### Nuevas columnas y sumas
+
+#== code
+ppto["S1"] = ppto[["Ene", "Feb", "Mar", "Abr", "May", "Jun"]].sum(axis=1)   # axis=1: suma por fila
+ppto["peso_S1"] = ppto["S1"] / ppto["Total"]
+ppto[["canal", "concepto", "S1", "Total", "peso_S1"]].head(4)
+
+#== md
+### Agrupar (el SUMAR.SI de antes, en una línea)
+
+#== code
+ppto.groupby("concepto")["Total"].sum()
+
+#== md
+### ✏️ Ejercicio 4.1
+Calcula `siniestralidad_ppto`: una **Series** con el ratio de siniestralidad presupuestado por canal = Total de "Coste de siniestros" / Total de "Primas devengadas".
+
+Pista: filtra cada concepto, pon `canal` como índice (`.set_index("canal")`) y divide una columna `Total` entre la otra.
+
+#== code
+# >>> ALUMNO
+# primas = ...
+# costes = ...
+# siniestralidad_ppto = ...
+# <<< ALUMNO
+# >>> SOLUCION
+primas = ppto[ppto["concepto"] == "Primas devengadas"].set_index("canal")["Total"]
+costes = ppto[ppto["concepto"] == "Coste de siniestros"].set_index("canal")["Total"]
+siniestralidad_ppto = costes / primas
+# <<< SOLUCION
+siniestralidad_ppto
+
+#== code
+_p = ppto.pivot_table(index="canal", columns="concepto", values="Total", aggfunc="sum")
+comprobar(siniestralidad_ppto, _p["Coste de siniestros"] / _p["Primas devengadas"],
+          "Divide costes entre primas, ambos con 'canal' como índice", rtol=1e-3)
+
+#== md
+⭐ **Opcional:** ¿qué canal tiene el presupuesto de siniestralidad más optimista? ¿Y qué peso tiene cada canal en las primas presupuestadas?
+
+#== code
+# Tu código aquí (opcional)
+
+#== md
+---
+## Chuleta Excel → pandas
+
+| Excel | pandas |
+|---|---|
+| Abrir libro | `pd.read_excel("f.xlsx", sheet_name="Hoja", header=2)` |
+| Ver primeras filas | `df.head()` |
+| Autofiltro | `df[df["col"] == valor]` |
+| Ordenar | `df.sort_values("col", ascending=False)` |
+| Nueva columna con fórmula | `df["margen"] = df["prima"] - df["coste"]` |
+| SUMA / PROMEDIO / CONTAR | `df["col"].sum()` / `.mean()` / `.count()` |
+| SUMAR.SI.CONJUNTO | `df.groupby(["a", "b"])["col"].sum()` |
+| Tabla dinámica | `df.pivot_table(index="a", columns="b", values="col", aggfunc="sum")` |
+| BUSCARV | `df.merge(tabla, on="clave", how="left")` *(sesión 2)* |
+| Guardar | `df.to_excel("salida.xlsx", index=False)` |
+
+## 🎟️ Ticket de salida
+Antes de irte, escribe en el chat (o en un post-it):
+1. Una cosa que hoy te ha quedado clara.
+2. Una cosa que todavía no termina de encajar.

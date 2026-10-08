@@ -1,0 +1,605 @@
+#== md
+# Sesión 3 · Automatización del cierre mensual
+
+**Pregunta de negocio:** *¿Cómo pasamos de 3 días de copiar y pegar a un cierre que se ejecuta con un comando, se valida solo y deja en la bandeja de cada director de canal su informe?*
+
+{{SOLUCIONES}}
+
+| Bloque | Contenido | Min |
+|---|---|---|
+| 0 | Demo del resultado final | 5 |
+| 1 | Ficheros: leer 12 Excel con formatos distintos | 25 |
+| 2 | Validación y control | 20 |
+| 3 | Real vs presupuesto (con reparto de gastos) | 20 |
+| 4 | Salidas: Excel formateado, PDF y correos | 20 |
+| 5 | Del notebook al proceso: script, configuración, Git y programación | 15 |
+
+**Los datos de entrada** (carpeta `data/entrada/`):
+- `bordereaux/siniestros_2025-MM.xlsx`: un Excel por mes con los siniestros declarados. **En julio cambió el sistema** y el formato es distinto.
+- `presupuesto_2025.xlsx`: presupuesto por canal, concepto y mes (formato ancho, como en Excel).
+- `gastos_estructura_2025.xlsx`: gastos reales por mes, centro de coste y partida.
+- `parametros/parametros_2025.xlsx`: comisiones por canal y claves de reparto de gastos.
+
+#== setup
+
+#== code
+import logging
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from curso_seguros.datos import DATA, OUTPUT, cargar_cartera
+from curso_seguros.comprobar import comprobar
+
+pd.set_option("display.float_format", lambda x: f"{x:,.2f}")
+pd.set_option("display.max_columns", 30)
+
+#== md
+---
+# Bloque 0 · Demo: el cierre en un comando
+
+Este es el **producto final** de hoy. Un script lee todo, valida, calcula y genera los entregables. Ejecútalo:
+
+#== code
+r = subprocess.run([sys.executable, "scripts/run_report.py", "--periodo", "2025-09"],
+                   capture_output=True, text=True)
+print(r.stderr[-1500:] or r.stdout[-1500:])
+
+#== code
+for f in sorted((OUTPUT / "2025-09").rglob("*.*")):
+    print(f.relative_to(OUTPUT))
+
+#== md
+> En Colab puedes descargar cualquier fichero desde el panel 📁 de la izquierda (clic derecho → Descargar). Abre el Excel y el PDF para ver qué vamos a construir.
+
+Ahora lo construimos **pieza a pieza**.
+
+---
+# Bloque 1 · Manipulación de ficheros
+
+### `pathlib`: rutas que funcionan en Windows, Mac y Colab
+
+#== code
+carpeta = DATA / "entrada" / "bordereaux"          # el operador / une rutas
+ficheros = sorted(carpeta.glob("siniestros_2025-*.xlsx"))
+for f in ficheros:
+    print(f.name, f"{f.stat().st_size / 1024:,.0f} KB")
+
+#== md
+### ¿Cómo es un fichero por dentro?
+Leemos **sin cabecera** (`header=None`) para ver el fichero tal cual:
+
+#== code
+pd.read_excel(ficheros[0], sheet_name="Detalle", header=None).head(6)
+
+#== code
+pd.read_excel(ficheros[0], sheet_name="Detalle", header=None).tail(3)
+
+#== md
+Problemas a resolver:
+1. Tres filas de título antes de la cabecera → `header=3`.
+2. Una fila vacía y una fila `TOTAL` al final → hay que quitarlas.
+3. Una hoja `Resumen` con el total que, según el sistema, debería sumar el detalle → **la usaremos para cuadrar**.
+
+Comparemos ahora enero y julio:
+
+#== code
+ene = pd.read_excel(ficheros[0], sheet_name="Detalle", header=3)
+jul = pd.read_excel(ficheros[6], sheet_name="Detalle", header=3)
+print("Enero:", ene.columns.tolist())
+print("Julio:", jul.columns.tolist())
+jul.head(3)
+
+#== md
+El nuevo sistema (julio) usa **otros nombres de columna**, las **fechas vienen como texto** `dd/mm/aaaa` y los **importes como texto con formato español** (`1.204,00`). Es el típico problema que hoy se arregla a mano cada mes.
+
+### Paso 1: un diccionario que traduce nombres de columna
+
+#== code
+MAPA_COLUMNAS = {
+    "Nº Siniestro": "id_siniestro",         "N_SINIESTRO": "id_siniestro",
+    "Nº Póliza": "id_poliza",               "N_POLIZA": "id_poliza",
+    "Fecha ocurrencia": "fecha_ocurrencia", "F_OCURRENCIA": "fecha_ocurrencia",
+    "Fecha declaración": "fecha_declaracion", "F_DECLARACION": "fecha_declaracion",
+    "Canal": "canal",                       "CANAL": "canal",
+    "Región": "region",                     "REGION": "region",
+    "Importe (€)": "importe",               "IMPORTE_EUR": "importe",
+    "Estado": "estado",                     "ESTADO": "estado",
+}
+jul.rename(columns=MAPA_COLUMNAS).columns.tolist()
+
+#== md
+### ✏️ Ejercicio 1.1 · Importes con formato español
+Escribe la función `a_numero(serie)` que convierta textos como `'1.234,56'` en el número `1234.56`. Si la serie ya es numérica, devuélvela tal cual.
+
+Pista: `serie.str.replace(".", "", regex=False)` quita los puntos de miles; después cambia la coma por un punto y aplica `pd.to_numeric(..., errors="coerce")`.
+
+#== code
+# >>> ALUMNO
+# def a_numero(serie):
+#     if pd.api.types.is_numeric_dtype(serie):
+#         return serie
+#     ...
+# <<< ALUMNO
+# >>> SOLUCION
+def a_numero(serie):
+    """'1.234,56' -> 1234.56 ; deja igual las series ya numéricas."""
+    if pd.api.types.is_numeric_dtype(serie):
+        return serie.astype(float)
+    texto = serie.astype(str).str.strip()
+    texto = texto.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+    return pd.to_numeric(texto, errors="coerce")
+# <<< SOLUCION
+
+#== code
+prueba = pd.Series(["1.234,56", "602,00", "-301,50", "4.075.400,56"])
+comprobar(lambda: a_numero(prueba), pd.Series([1234.56, 602.0, -301.5, 4075400.56]),
+          "Primero quita los puntos y después cambia la coma por punto (el orden importa)")
+
+#== code
+# 🛟 Red de seguridad: si tu función todavía no funciona, usamos la de referencia para poder seguir
+try:
+    assert np.allclose(a_numero(prueba), [1234.56, 602.0, -301.5, 4075400.56])
+except Exception:
+    from curso_seguros.cierre import a_numero
+    print("🛟 Usando a_numero de referencia (curso_seguros.cierre) para continuar")
+
+#== md
+### Paso 2: una función que normaliza cualquier bordereau
+Juntamos todo en una función. **Una sola función para los 12 meses**: si el mes que viene cambia algo, se arregla en un único sitio.
+
+#== code
+def a_fecha(serie):
+    if pd.api.types.is_datetime64_any_dtype(serie):
+        return serie
+    return pd.to_datetime(serie, format="%d/%m/%Y", errors="coerce")
+
+
+def normalizar_bordereau(ruta):
+    """Lee un bordereau mensual (formato antiguo o nuevo) y lo estandariza."""
+    df = pd.read_excel(ruta, sheet_name="Detalle", header=3)
+    df = df.rename(columns=MAPA_COLUMNAS)
+    df = df[df["id_siniestro"].notna() & (df["id_siniestro"] != "TOTAL")].copy()   # fuera vacías y TOTAL
+    df["id_poliza"] = pd.to_numeric(df["id_poliza"], errors="coerce").astype("Int64")
+    df["importe"] = a_numero(df["importe"])
+    df["fecha_ocurrencia"] = a_fecha(df["fecha_ocurrencia"])
+    df["fecha_declaracion"] = a_fecha(df["fecha_declaracion"])
+    df["canal"] = df["canal"].astype(str).str.strip().str.title()      # ' AGENTES' -> 'Agentes'
+    df["estado"] = df["estado"].astype(str).str.strip().str.title()
+    df["mes"] = int(Path(ruta).stem[-2:])
+    return df.reset_index(drop=True)
+
+
+normalizar_bordereau(ficheros[6]).head()
+
+#== md
+### ✏️ Ejercicio 1.2 · Consolidar los 12 meses
+Aplica `normalizar_bordereau` a todos los `ficheros` y únelos con `pd.concat` en un único DataFrame `siniestros_brutos`.
+
+Pista: crea una lista vacía, añade (`append`) cada DataFrame en un bucle y al final `pd.concat(lista, ignore_index=True)`.
+
+#== code
+# >>> ALUMNO
+# partes = []
+# for f in ficheros:
+#     ...
+# siniestros_brutos = ...
+# <<< ALUMNO
+# >>> SOLUCION
+partes = []
+for f in ficheros:
+    partes.append(normalizar_bordereau(f))
+siniestros_brutos = pd.concat(partes, ignore_index=True)
+# <<< SOLUCION
+siniestros_brutos.shape
+
+#== code
+from curso_seguros.cierre import normalizar_bordereau as _nb
+_n = sum(len(_nb(f)[0]) for f in ficheros)
+comprobar(lambda: len(siniestros_brutos), _n, "¿Has recorrido los 12 ficheros y usado pd.concat?")
+comprobar(lambda: siniestros_brutos["importe"].dtype.kind, "f", "El importe debe ser numérico: ¿has aplicado a_numero?")
+
+#== code
+# 🛟 Red de seguridad
+if not isinstance(siniestros_brutos, pd.DataFrame):
+    siniestros_brutos = pd.concat([normalizar_bordereau(f) for f in ficheros], ignore_index=True)
+    print("🛟 Usando la solución de referencia para continuar")
+
+#== md
+---
+# Bloque 2 · Validación y control
+
+El cierre no termina cuando "sale un número", sino cuando sabemos que **el número es correcto**. Cada control responde a una pregunta que hoy se revisa a ojo:
+
+| Control | Pregunta |
+|---|---|
+| Duplicados | ¿Algún siniestro aparece dos veces? |
+| Integridad referencial | ¿Todas las pólizas existen en cartera? |
+| Rangos | ¿Hay importes negativos o absurdos? |
+| Cuadre | ¿El detalle suma lo que dice el resumen del sistema? |
+| Valores válidos | ¿Los canales son los 4 que existen? |
+
+#== code
+cartera = cargar_cartera()
+
+dup = siniestros_brutos[siniestros_brutos.duplicated("id_siniestro", keep=False)]
+print("Filas duplicadas:", siniestros_brutos.duplicated("id_siniestro").sum())
+dup.sort_values("id_siniestro").head(4)
+
+#== code
+huerfanos = siniestros_brutos[~siniestros_brutos["id_poliza"].isin(cartera["id_poliza"])]
+print("Siniestros con póliza inexistente:", len(huerfanos))
+huerfanos[["id_siniestro", "id_poliza", "canal", "importe", "mes"]].head()
+
+#== md
+Las pólizas inexistentes empiezan por **9** seguido de un número válido: parece un error de tecleo en origen. **No los borramos** (el coste es real): los marcamos y se reportan al área de siniestros.
+
+#== code
+negativos = siniestros_brutos[siniestros_brutos["importe"] < 0]
+negativos[["id_siniestro", "importe", "estado", "mes"]]
+
+#== md
+Son **recobros** (dinero que recuperamos de otra aseguradora). Son legítimos, pero hay que vigilarlos: un aviso, no un error.
+
+### El cuadre contra la hoja Resumen
+
+#== code
+siniestros = siniestros_brutos.drop_duplicates("id_siniestro").copy()     # tratamiento: quitar duplicados
+
+filas = []
+for f in ficheros:
+    resumen = pd.read_excel(f, sheet_name="Resumen").set_index("Concepto")["Valor"]
+    mes = int(f.stem[-2:])
+    detalle = siniestros[siniestros["mes"] == mes]
+    filas.append({"mes": mes,
+                  "n_resumen": resumen.iloc[0], "n_detalle": len(detalle),
+                  "importe_resumen": resumen.iloc[1], "importe_detalle": detalle["importe"].sum()})
+cuadre = pd.DataFrame(filas)
+cuadre["diferencia"] = cuadre["importe_detalle"] - cuadre["importe_resumen"]
+cuadre
+
+#== md
+### ✏️ Ejercicio 2.1
+Añade a `cuadre` una columna `resultado` con `"OK"` si la diferencia de importe es menor que 1 céntimo en valor absoluto y `"KO"` si no. ¿Qué mes no cuadra?
+
+Pista: `np.where(cuadre["diferencia"].abs() < 0.01, "OK", "KO")`
+
+#== code
+# >>> ALUMNO
+# cuadre["resultado"] = ...
+# <<< ALUMNO
+# >>> SOLUCION
+cuadre["resultado"] = np.where(cuadre["diferencia"].abs() < 0.01, "OK", "KO")
+# <<< SOLUCION
+cuadre[["mes", "diferencia", "resultado"]]
+
+#== code
+comprobar(lambda: cuadre.loc[cuadre["resultado"] == "KO", "mes"].tolist(), [9],
+          "Compara el valor ABSOLUTO de la diferencia con 0.01")
+
+#== md
+**Septiembre no cuadra:** en el detalle falta un siniestro de 3.204 € que sí aparece en el resumen. Sin este control, el cierre de septiembre habría infravalorado los costes.
+
+### Todos los controles en una tabla (lo que irá a la hoja "Controles")
+El módulo `curso_seguros.controles` tiene estos mismos controles empaquetados como funciones reutilizables:
+
+#== code
+from curso_seguros import controles as ctl
+
+tabla_controles = ctl.ejecutar_controles([
+    ctl.control_sin_duplicados(siniestros_brutos, "id_siniestro"),
+    ctl.control_integridad(siniestros, "id_poliza", cartera["id_poliza"], "cartera"),
+    ctl.control_rango(siniestros, "importe", minimo=0, aviso=True),
+    ctl.control_sin_nulos(siniestros, ["id_siniestro", "id_poliza", "importe", "canal"]),
+    ctl.control_cuadre("Cuadre importe anual vs Resumen", siniestros["importe"].sum(),
+                       cuadre["importe_resumen"].sum()),
+])
+tabla_controles
+
+#== md
+### ⭐ La versión profesional: `pandera`
+`pandera` permite declarar **cómo deben ser los datos** (un "contrato") y validarlos de una vez. Con `lazy=True` informa de **todos** los fallos, no solo del primero.
+
+#== code
+import pandera.pandas as pa
+
+esquema = pa.DataFrameSchema({
+    "id_siniestro": pa.Column(unique=True),
+    "id_poliza": pa.Column(checks=pa.Check(lambda s: s.isin(cartera["id_poliza"]), name="existe_en_cartera")),
+    "importe": pa.Column(float, checks=[pa.Check.ge(0), pa.Check.le(5_000_000)]),
+    "canal": pa.Column(checks=pa.Check.isin(["Agentes", "Corredores", "Directo", "Bancaseguros"])),
+    "fecha_declaracion": pa.Column(checks=pa.Check.ge(pd.Timestamp("2025-01-01"))),
+})
+try:
+    esquema.validate(siniestros_brutos, lazy=True)
+except pa.errors.SchemaErrors as e:
+    print(e.failure_cases.groupby(["column", "check"]).size())
+
+#== md
+### `logging`: dejar rastro de lo que pasó
+En un proceso automático nadie mira la pantalla. El `logging` deja un registro con fecha y hora (en el script se guarda en `ejecucion.log`).
+
+#== code
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", force=True)
+log = logging.getLogger("cierre")
+log.info("Siniestros cargados: %d", len(siniestros))
+log.warning("Mes 9 no cuadra con el resumen: diferencia %.2f €", cuadre.loc[cuadre["mes"] == 9, "diferencia"].iloc[0])
+
+#== md
+---
+# Bloque 3 · Real vs presupuesto
+
+### 3.1 El presupuesto: de formato ancho a formato largo
+Los humanos leemos mejor el formato **ancho** (meses en columnas) y los ordenadores calculan mejor con el **largo** (una fila por canal-concepto-mes). `melt` es el "anular dinamización" de Power Query.
+
+#== code
+ppto_ancho = pd.read_excel(DATA / "entrada" / "presupuesto_2025.xlsx", header=2)
+ppto_ancho.head(4)
+
+#== md
+### ✏️ Ejercicio 3.1
+Convierte `ppto_ancho` a formato largo en `ppto` con columnas `canal`, `concepto`, `mes_txt` e `importe`. Antes, quita la columna `Total` (si no, la tratarías como un mes más).
+
+Pista: `ppto_ancho.drop(columns="Total").melt(id_vars=["canal", "concepto"], var_name="mes_txt", value_name="importe")`
+
+#== code
+# >>> ALUMNO
+# ppto = ...
+# <<< ALUMNO
+# >>> SOLUCION
+ppto = ppto_ancho.drop(columns="Total").melt(id_vars=["canal", "concepto"], var_name="mes_txt",
+                                             value_name="importe")
+# <<< SOLUCION
+ppto.head()
+
+#== code
+comprobar(lambda: (len(ppto), round(ppto["importe"].sum())), (16 * 12, round(ppto_ancho["Total"].sum())),
+          "Deben quedar 16 filas × 12 meses = 192 filas, y la suma debe coincidir con la columna Total")
+
+#== code
+# 🛟 Red de seguridad
+if not isinstance(ppto, pd.DataFrame) or "mes_txt" not in ppto.columns:
+    ppto = ppto_ancho.drop(columns="Total").melt(id_vars=["canal", "concepto"], var_name="mes_txt", value_name="importe")
+    print("🛟 Usando la solución de referencia para continuar")
+
+#== code
+MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+ppto["mes"] = ppto["mes_txt"].map({m: i + 1 for i, m in enumerate(MESES_CORTOS)})
+ppto.sample(3, random_state=1)
+
+#== md
+### 3.2 Ingresos reales: prima devengada por mes
+Igual que en la sesión 2, pero mes a mes: prima anual × días cubiertos **dentro del mes** / 365. La función `devengo_mensual` recorre los 12 meses:
+
+#== code
+from curso_seguros.cierre import devengo_mensual
+import inspect
+print(inspect.getsource(devengo_mensual))
+
+#== code
+devengo = devengo_mensual(cartera)
+devengo.head()
+
+#== md
+### 3.3 Reparto de gastos de estructura (contabilidad analítica)
+Cada centro de coste se reparte entre canales con **su propia clave**:
+
+#== code
+parametros = pd.read_excel(DATA / "entrada" / "parametros" / "parametros_2025.xlsx", sheet_name=None)
+parametros["Claves_reparto"]
+
+#== md
+Ejemplo a mano para **un** centro y **un** mes: Tramitación de siniestros de septiembre, repartida por número de siniestros.
+
+#== code
+gastos = pd.read_excel(DATA / "entrada" / "gastos_estructura_2025.xlsx")
+gasto_sep = gastos[(gastos["mes"] == "2025-09") & (gastos["centro_coste"] == "Tramitación de siniestros")]["importe"].sum()
+n_sin_sep = siniestros[siniestros["mes"] == 9].groupby("canal").size()
+peso = n_sin_sep / n_sin_sep.sum()
+pd.DataFrame({"n_siniestros": n_sin_sep, "peso": peso, "gasto_asignado": gasto_sep * peso})
+
+#== md
+La función `reparto_gastos` hace lo mismo para **todos** los centros y meses a la vez (con `merge` y `groupby().transform`):
+
+#== code
+from curso_seguros.cierre import reparto_gastos
+
+drivers = (devengo.rename(columns={"polizas_en_vigor": "n_polizas"})
+           .merge(siniestros.groupby(["mes", "canal"], as_index=False).agg(n_siniestros=("id_siniestro", "size")),
+                  on=["mes", "canal"], how="left").fillna({"n_siniestros": 0}))
+reparto = reparto_gastos(gastos, parametros["Claves_reparto"], drivers)
+reparto.pivot_table(index="centro_coste", columns="canal", values="gasto_asignado", aggfunc="sum").round(0)
+
+#== md
+### 3.4 La cuenta de resultados y la comparación
+
+#== code
+from curso_seguros.cierre import cuenta_resultados_mensual, tabla_resultados, real_vs_presupuesto
+
+real = cuenta_resultados_mensual(siniestros, devengo, parametros["Comisiones"], reparto)
+MES = 9
+ytd = list(range(1, MES + 1))
+tabla_resultados(real, ytd)
+
+#== code
+rvp = real_vs_presupuesto(real, ppto, ytd)
+rvp[rvp["concepto"] == "Margen técnico"]
+
+#== code
+rvp[rvp["canal"] == "Directo"]
+
+#== md
+### 💬 Para discutir
+El canal **Directo** tiene una desviación de gastos de estructura del +86 %. ¿Ha gastado de más? No exactamente:
+- En el **presupuesto**, los gastos se repartieron en proporción a la prima.
+- En el **real**, *Marketing digital* se imputa al 100 % a Directo (clave `solo_directo`).
+
+**La desviación es, en buena parte, un efecto del criterio de reparto**, no de gestión. Es la conversación típica de FP&A que el dato bien estructurado permite tener (y explicar) en minutos.
+
+---
+# Bloque 4 · Salidas automáticas
+
+### 4.1 Excel con formato (`xlsxwriter`)
+`df.to_excel()` vuelca los datos sin formato. Con `xlsxwriter` controlamos formatos numéricos, anchos, colores, paneles inmovilizados e incluso gráficos nativos de Excel.
+
+#== code
+resultado = tabla_resultados(real, ytd)
+ruta_xlsx = OUTPUT / "demo" / "resultado_simple.xlsx"
+ruta_xlsx.parent.mkdir(parents=True, exist_ok=True)
+
+with pd.ExcelWriter(ruta_xlsx, engine="xlsxwriter") as xw:
+    resultado.to_excel(xw, sheet_name="Resultado", startrow=2)
+    libro, hoja = xw.book, xw.sheets["Resultado"]
+    euros = libro.add_format({"num_format": '#,##0 "€";[Red]-#,##0 "€"'})
+    pct = libro.add_format({"num_format": "0.0%"})
+    titulo = libro.add_format({"bold": True, "font_size": 14, "font_color": "#1F4E79"})
+    hoja.write("A1", f"Cuenta técnica acumulada a septiembre 2025", titulo)
+    hoja.set_column("A:A", 16)
+    hoja.set_column("B:F", 18, euros)
+    hoja.set_column("G:I", 14, pct)
+    hoja.freeze_panes(3, 1)
+    # semáforo en el ratio combinado: rojo si > 100 %
+    rojo = libro.add_format({"bg_color": "#FFC7CE", "font_color": "#9C0006"})
+    hoja.conditional_format("I4:I8", {"type": "cell", "criteria": ">", "value": 1, "format": rojo})
+print("Guardado:", ruta_xlsx)
+
+#== md
+La versión completa (varias hojas, semáforos, hoja de controles y gráfico nativo) está en `curso_seguros.informes.escribir_excel_cierre`. Úsala como plantilla para tus propios informes.
+
+### 4.2 PDF de una página (`fpdf2`)
+
+#== code
+from fpdf import FPDF
+import matplotlib
+
+fuentes = Path(matplotlib.get_data_path()) / "fonts" / "ttf"   # fuente con € y tildes
+pdf = FPDF()
+pdf.add_page()
+pdf.add_font("DejaVu", "", str(fuentes / "DejaVuSans.ttf"))
+pdf.set_font("DejaVu", "", 14)
+pdf.cell(0, 10, "Cierre de septiembre 2025 · Autos", new_x="LMARGIN", new_y="NEXT")
+pdf.set_font("DejaVu", "", 10)
+tot = resultado.loc["Total"]
+pdf.multi_cell(0, 6, f"Primas devengadas: {tot['Primas devengadas']:,.0f} €\n"
+                     f"Margen técnico: {tot['Margen técnico']:,.0f} €\n"
+                     f"Ratio combinado: {tot['Ratio combinado %']:.1%}")
+pdf.output(str(OUTPUT / "demo" / "resumen_simple.pdf"))
+print("PDF generado")
+
+#== md
+> ⚠️ Las fuentes básicas de PDF (Helvetica, Times) **no tienen el símbolo €**. Por eso cargamos la fuente DejaVu, que viene incluida con matplotlib.
+
+### 4.3 Un correo por responsable de canal (modo simulacro)
+El patrón "**combinar correspondencia**": un bucle que, para cada canal, genera su Excel filtrado y su correo con el adjunto. Los correos se guardan como `.eml`: se abren con doble clic en Outlook y se revisan **antes** de enviar nada.
+
+#== code
+from curso_seguros.cierre import ejecutar_cierre
+from curso_seguros.informes import escribir_excel_cierre
+from curso_seguros.correo import construir_correo, guardar_eml
+
+res = ejecutar_cierre(MES)          # todo lo anterior en una llamada
+DESTINATARIOS = {"Agentes": "dir.agentes@ejemplo.com", "Corredores": "dir.corredores@ejemplo.com",
+                 "Directo": "dir.directo@ejemplo.com", "Bancaseguros": "dir.bancaseguros@ejemplo.com"}
+
+carpeta = OUTPUT / "demo" / "correos"
+for canal, email in DESTINATARIOS.items():
+    adjunto = escribir_excel_cierre(res, OUTPUT / "demo" / f"cierre_09_{canal}.xlsx", canal=canal)
+    r = res["resultado_ytd"].loc[canal]
+    cuerpo = (f"Hola,\n\nAdjunto el cierre de septiembre del canal {canal}.\n"
+              f"Margen técnico acumulado: {r['Margen técnico']:,.0f} € "
+              f"(ratio combinado {r['Ratio combinado %']:.1%}).\n\nUn saludo,\nFP&A Autos")
+    msg = construir_correo("fpa-autos@ejemplo.com", [email], f"Cierre 2025-09 · {canal}", cuerpo, [adjunto])
+    print("✉️ ", guardar_eml(msg, carpeta, f"correo_{canal}").name)
+
+#== md
+> **¿Y el envío real?** Desde Colab no se envía correo corporativo (Google bloquea el puerto SMTP 25 y, además, Office 365 está retirando el envío SMTP con usuario y contraseña). En la empresa se hace con **Microsoft Graph** u **Outlook** (`win32com` en Windows), configurado con IT. La lógica de construir el mensaje es la misma; solo cambia la última línea.
+
+---
+# Bloque 5 · Del notebook al proceso
+
+Un notebook es ideal para **explorar y explicar**. Un proceso que se ejecuta cada mes necesita un **script**: se lanza con un comando, recibe parámetros y deja log. Mira el script del curso:
+
+#== code
+print(Path("scripts/run_report.py").read_text(encoding="utf-8")[:2500])
+
+#== md
+### Configuración fuera del código
+Lo que cambia (periodo, destinatarios, rutas) va en `config/params.yaml`, no en el código. Así cambiar un destinatario no exige tocar Python.
+
+#== code
+print(Path("config/params.yaml").read_text(encoding="utf-8"))
+
+#== md
+### Estructura del proyecto
+
+```
+curso-python-finanzas/
+├── config/          ← parámetros (YAML)
+├── data/
+│   ├── entrada/     ← lo que nos mandan (nunca se modifica a mano)
+│   └── ...
+├── notebooks/       ← exploración y formación
+├── output/          ← lo que generamos (no se sube a Git)
+├── scripts/         ← procesos ejecutables (run_report.py)
+├── src/curso_seguros/ ← funciones reutilizables (la "lógica de negocio")
+├── requirements.txt ← librerías necesarias
+└── README.md        ← cómo se usa
+```
+
+**Regla:** la lógica vive en `src/` y la usan tanto los notebooks como los scripts. **Una sola versión de la verdad.**
+
+### Git en 15 minutos
+Git es el "control de cambios" de una carpeta entera: guarda quién cambió qué, cuándo y por qué, y permite volver atrás.
+
+| Concepto | Analogía | Comando | En GitHub Desktop |
+|---|---|---|---|
+| Repositorio | La carpeta del proyecto con historial | `git clone <url>` | *File → Clone repository* |
+| Commit | Una versión guardada con comentario | `git add . && git commit -m "Añade control de cuadre"` | Escribir el resumen → *Commit to main* |
+| Push / Pull | Subir / bajar cambios del servidor | `git push` / `git pull` | *Push origin* / *Fetch origin* |
+| Rama | Una copia para probar sin romper nada | `git switch -c nuevo-informe` | *Current branch → New branch* |
+| Pull request | Pedir que revisen y aprueben tus cambios | (en la web de GitHub) | *Create Pull Request* |
+
+**Qué NO se sube a Git** (`.gitignore`): datos confidenciales, la carpeta `output/`, contraseñas y ficheros `.env`. Tampoco las **salidas de los notebooks**, que pueden contener cifras; para eso está `nbstripout`.
+
+### Programar la ejecución
+- **Windows:** Programador de tareas → *Crear tarea básica* → mensual, día 3 → *Iniciar un programa*: `python scripts\run_report.py`.
+- **Servidor o nube:** cron, Azure Data Factory, Airflow o GitHub Actions, según lo que tenga IT.
+
+### ✏️ Ejercicio 5.1 · Cierre de diciembre
+Ejecuta el script para el periodo **2025-12** (sin correos) y guarda en `margen_anual` el margen técnico total del año que aparece en la hoja "Resultado YTD" del Excel generado.
+
+Pista: usa `subprocess.run` como en el bloque 0, y después `pd.read_excel(..., sheet_name="Resultado YTD", header=2, index_col=0)`.
+
+#== code
+# >>> ALUMNO
+# r = subprocess.run([sys.executable, "scripts/run_report.py", "--periodo", ..., "--sin-correos"],
+#                    capture_output=True, text=True)
+# margen_anual = ...
+# <<< ALUMNO
+# >>> SOLUCION
+r = subprocess.run([sys.executable, "scripts/run_report.py", "--periodo", "2025-12", "--sin-correos"],
+                   capture_output=True, text=True)
+excel_dic = pd.read_excel(OUTPUT / "2025-12" / "cierre_2025-12.xlsx", sheet_name="Resultado YTD",
+                          header=2, index_col=0)
+margen_anual = excel_dic.loc["Total", "Margen técnico"]
+# <<< SOLUCION
+print(f"Margen técnico 2025: {margen_anual:,.0f} €")
+
+#== code
+comprobar(lambda: margen_anual, tabla_resultados(ejecutar_cierre(12)["real_largo"], list(range(1, 13))).loc["Total", "Margen técnico"],
+          "Lee la hoja 'Resultado YTD' con header=2 e index_col=0 y busca la fila Total", rtol=1e-6)
+
+#== md
+---
+## Resumen de la sesión
+- **Una función por tarea** (`normalizar_bordereau`, `a_numero`…), aplicada en bucle a N ficheros.
+- **Controles explícitos**: duplicados, integridad, rangos y cuadres, con una hoja de controles en el informe.
+- **Formato largo** para calcular (`melt`) y **ancho** para presentar (`pivot_table`).
+- El reparto de gastos es una decisión de negocio que **explica desviaciones**.
+- Excel, PDF y correos se generan **desde los mismos datos**, sin copiar y pegar.
+- Notebook para explorar; **script + config + Git** para producir.
+
+**Próxima sesión:** ¿el margen negativo de Agentes es estructural o mala suerte? Estadística para dar **rangos** en vez de números puntuales.

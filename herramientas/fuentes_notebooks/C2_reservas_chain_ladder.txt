@@ -1,0 +1,251 @@
+#== md
+# C2 · Reservas, IBNR e impacto en resultados (complementario, autónomo)
+
+**Tiempo estimado:** 45–60 min · **Requisitos:** sesiones 2 y 4
+
+{{SOLUCIONES}}
+
+**Pregunta de FP&A:** *el coste de siniestros de mi cuenta de resultados, ¿es solo lo declarado? ¿Qué pasa con los siniestros que ya han ocurrido pero todavía no conocemos?*
+
+| Bloque | Contenido |
+|---|---|
+| 1 | Por qué importa: el IBNR en nuestra propia cartera |
+| 2 | El triángulo de desarrollo y el método chain-ladder (con pandas) |
+| 3 | Incertidumbre de la reserva: Mack y bootstrap (paquete `chainladder`) |
+| 4 | Back-test con datos reales: ¿cuánto acertó la reserva? |
+
+> ⚠️ **En Colab**, la primera ejecución de la celda de preparación instala `chainladder` y **reinicia el entorno**. Cuando reconecte, vuelve a ejecutarla y sigue.
+
+#== setup:chainladder
+
+#== code
+import warnings
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import chainladder as cl
+
+warnings.filterwarnings("ignore")   # chainladder emite avisos numéricos internos que no afectan al resultado
+
+from curso_seguros.datos import DATA, cargar_siniestros_referencia
+from curso_seguros.comprobar import comprobar
+
+pd.set_option("display.float_format", lambda x: f"{x:,.3f}")
+print("chainladder", cl.__version__, "| pandas", pd.__version__)
+
+#== md
+---
+# Bloque 1 · Por qué importa: el IBNR
+
+En la sesión 3 calculamos el coste de siniestros con lo **declarado** en cada bordereau. Pero un siniestro ocurrido el 28 de diciembre puede declararse en enero, o en marzo. Además, los siniestros ya declarados siguen **evolucionando**: se reabren, crece la estimación del daño corporal…
+
+- **IBNR** (*Incurred But Not Reported*): siniestros ocurridos y aún no declarados.
+- La **provisión técnica** de siniestros = pagos futuros esperados de todo lo ya ocurrido. Su variación **va directa a la cuenta de resultados**: si la reserva se queda corta, el beneficio de hoy es un "préstamo" del futuro.
+
+Veámoslo en nuestra cartera de 2025:
+
+#== code
+sin = cargar_siniestros_referencia()
+tardios = sin[sin["fecha_declaracion"] >= "2026-01-01"]
+print(f"Siniestros ocurridos en 2025 y declarados en 2026: {len(tardios)} ({len(tardios) / len(sin):.1%})")
+print(f"Coste: {tardios['importe'].sum() / 1e6:,.2f} M€ ({tardios['importe'].sum() / sin['importe'].sum():.1%} del coste 2025)")
+print(f"Retraso medio de declaración: {(tardios['fecha_declaracion'] - tardios['fecha_ocurrencia']).dt.days.mean():.0f} días")
+
+#== md
+Si cerráramos 2025 solo con lo declarado a 31/12, el coste estaría **infravalorado** en esa cantidad y el margen, **sobrevalorado**. En la vida real esto es más grave aún en ramos de "cola larga" (RC general, accidentes de trabajo), donde los siniestros tardan años en cerrarse.
+
+---
+# Bloque 2 · El triángulo de desarrollo y el chain-ladder
+
+### El triángulo
+Filas = **año de ocurrencia**; columnas = **meses de desarrollo** (cuánto tiempo ha pasado desde el inicio del año de ocurrencia); valores = **pagos acumulados**. El triángulo inferior (el futuro) está vacío: es lo que hay que estimar.
+
+Usamos el triángulo clásico **RAA** (Reinsurance Association of America, 1981–1990), un ejemplo estándar de la literatura actuarial.
+
+#== code
+raa = pd.read_csv(DATA / "triangulos" / "raa.csv")
+triangulo = raa.pivot(index="anio_ocurrencia", columns="desarrollo_meses", values="pagos_acumulados")
+triangulo
+
+#== md
+### Factores de desarrollo (*age-to-age*)
+¿Cuánto crecen, de media, los pagos acumulados al pasar de 12 a 24 meses? Del 24 al 36…
+
+El factor se calcula **ponderado por volumen**: Σ columna siguiente / Σ columna actual, usando solo los años que tienen ambos valores. ¡Otra vez el **cociente de sumas** (sesión 2)!
+
+$$f_{j} = \frac{\sum_i C_{i,j+1}}{\sum_i C_{i,j}}$$
+
+### ✏️ Ejercicio 2.1
+Calcula `factores`: una Series con los 9 factores de desarrollo (12→24, 24→36, …, 108→120).
+
+Pista: para cada par de columnas consecutivas `a`, `b`, quédate con las filas en que `b` no es nulo: `m = triangulo[b].notna()` y después `triangulo.loc[m, b].sum() / triangulo.loc[m, a].sum()`.
+
+#== code
+columnas = triangulo.columns.tolist()
+# >>> ALUMNO
+# factores = {}
+# for a, b in zip(columnas[:-1], columnas[1:]):
+#     ...
+# factores = pd.Series(factores)
+# <<< ALUMNO
+# >>> SOLUCION
+factores = {}
+for a, b in zip(columnas[:-1], columnas[1:]):
+    m = triangulo[b].notna()
+    factores[f"{a}-{b}"] = triangulo.loc[m, b].sum() / triangulo.loc[m, a].sum()
+factores = pd.Series(factores)
+# <<< SOLUCION
+factores
+
+#== code
+_ref = cl.Development().fit(cl.load_sample("raa")).ldf_.to_frame().iloc[0].to_numpy()
+comprobar(lambda: factores.to_numpy(), _ref, "Usa solo las filas donde la columna siguiente tiene dato", rtol=1e-6)
+
+#== code
+# 🛟 Red de seguridad
+if not isinstance(factores, pd.Series) or len(factores) != len(columnas) - 1:
+    factores = pd.Series({f"{a}-{b}": triangulo.loc[triangulo[b].notna(), b].sum() / triangulo.loc[triangulo[b].notna(), a].sum()
+                          for a, b in zip(columnas[:-1], columnas[1:])})
+    print("🛟 Usando la solución de referencia")
+
+#== md
+### Del factor a la última y al IBNR
+- **CDF** (factor acumulado hasta el final) = producto de los factores pendientes.
+- **Última estimada** = último valor conocido × CDF.
+- **Reserva (IBNR en sentido amplio)** = última − pagado hasta hoy.
+
+#== code
+cdf = factores[::-1].cumprod()[::-1]          # producto acumulado desde el final
+cdf = pd.concat([cdf, pd.Series({"120-ult": 1.0})])
+ultimo_conocido = triangulo.ffill(axis=1).iloc[:, -1]
+edad_actual = triangulo.notna().sum(axis=1)                  # nº de diagonales conocidas
+cdf_por_anio = edad_actual.map(lambda k: cdf.iloc[k - 1])
+
+resultado = pd.DataFrame({"pagado": ultimo_conocido, "CDF": cdf_por_anio,
+                          "ultima": ultimo_conocido * cdf_por_anio})
+resultado["reserva"] = resultado["ultima"] - resultado["pagado"]
+resultado.loc["Total"] = resultado.sum(numeric_only=True)
+resultado.loc["Total", "CDF"] = np.nan
+resultado
+
+#== md
+Fíjate en 1990: solo conocemos 12 meses y su CDF es ~9. **Un pequeño error en el primer pago se multiplica por 9.** Los años más recientes concentran casi toda la incertidumbre.
+
+---
+# Bloque 3 · Incertidumbre de la reserva
+
+La reserva es una **estimación**, no un número exacto. El paquete `chainladder` (mantenido con apoyo de la *Casualty Actuarial Society*) hace todo lo anterior en una línea y añade medidas de incertidumbre.
+
+#== code
+tri = cl.Triangle(raa, origin="anio_ocurrencia", development="desarrollo_meses",
+                  columns="pagos_acumulados", cumulative=True)
+modelo = cl.Chainladder().fit(tri)
+print(f"Reserva chain-ladder (paquete): {modelo.ibnr_.sum():,.0f}  |  la nuestra: {resultado.loc['Total', 'reserva']:,.0f}")
+
+#== md
+### Método de Mack: error estándar de la reserva
+
+#== code
+mack = cl.MackChainladder().fit(tri)
+resumen_mack = mack.summary_.to_frame()
+resumen_mack
+
+#== code
+total_ibnr = mack.ibnr_.sum()
+total_se = mack.total_mack_std_err_.to_numpy().ravel()[0]
+print(f"Reserva: {total_ibnr:,.0f} ± {total_se:,.0f} (error estándar = {total_se / total_ibnr:.0%} de la reserva)")
+
+#== md
+### Bootstrap ODP: la distribución completa
+Igual que en la sesión 4: se generan miles de triángulos "posibles" compatibles con los datos y se recalcula la reserva en cada uno.
+
+#== code
+sims = cl.BootstrapODPSample(n_sims=5000, random_state=42).fit_transform(tri)
+reservas_sim = cl.Chainladder().fit(sims).ibnr_.sum("origin").to_frame().to_numpy().ravel()
+
+p50, p75, p995 = np.percentile(reservas_sim, [50, 75, 99.5])
+fig, ax = plt.subplots(figsize=(8, 3.8))
+ax.hist(reservas_sim, bins=60, color="#1f4e79", alpha=0.8)
+for v, et in [(p50, "P50"), (p75, "P75"), (p995, "P99,5")]:
+    ax.axvline(v, color="#c0392b", ls="--")
+    ax.text(v, ax.get_ylim()[1] * 0.9, f" {et}\n {v:,.0f}", color="#c0392b", fontsize=9)
+ax.set_title("Distribución bootstrap de la reserva total (RAA)")
+plt.show()
+print(f"Media {reservas_sim.mean():,.0f} | P99,5 = {p995 / reservas_sim.mean():.1f} veces la media")
+
+#== md
+**Para finanzas:** el **P99,5** es el "1 en 200 años" que usa **Solvencia II** para calcular el capital. Aquí es **más del doble** de la reserva central. Por eso las desviaciones de reservas (*reserve development*) son uno de los grandes motores de sorpresas en la cuenta de resultados de una aseguradora.
+
+---
+# Bloque 4 · Back-test con datos reales: ¿cuánto acertó la reserva?
+
+La **CAS Loss Reserving Database** contiene triángulos reales de aseguradoras estadounidenses (Schedule P, autos particulares, ocurrencias 1998–2007) **incluyendo el triángulo inferior**: sabemos qué pasó después. Así podemos comprobar cuánto acierta el chain-ladder.
+
+#== code
+cas = pd.read_csv(DATA / "triangulos" / "cas_ppauto_1998_2007.csv")
+print(cas["compania"].nunique(), "compañías")
+cas.head()
+
+#== code
+COMPANIA = "State Farm Mut Grp"
+c = cas[cas["compania"] == COMPANIA].copy()
+completo = c.pivot(index="anio_ocurrencia", columns="desarrollo_meses", values="pagos_acumulados")
+# Lo que se sabía a 31/12/2007: año de ocurrencia + años de desarrollo - 1 <= 2007
+conocido = completo.copy()
+for anio in conocido.index:
+    for meses in conocido.columns:
+        if anio + meses // 12 - 1 > 2007:
+            conocido.loc[anio, meses] = np.nan
+(conocido / 1e3).round(0)       # millones de dólares (los datos originales vienen en miles)
+
+#== code
+def chain_ladder(tri):
+    """Chain-ladder ponderado por volumen. Devuelve (última estimada, pagado) por año."""
+    cols = tri.columns.tolist()
+    f = [tri.loc[tri[b].notna(), b].sum() / tri.loc[tri[b].notna(), a].sum() for a, b in zip(cols[:-1], cols[1:])]
+    cdf = np.append(np.cumprod(f[::-1])[::-1], 1.0)
+    pagado = tri.ffill(axis=1).iloc[:, -1]
+    edad = tri.notna().sum(axis=1)
+    return pagado * edad.map(lambda k: cdf[k - 1]), pagado
+
+ultima_est, pagado = chain_ladder(conocido)
+backtest = pd.DataFrame({"pagado_2007": pagado, "ultima_estimada": ultima_est,
+                         "ultima_real (a 120 meses)": completo.iloc[:, -1]})
+backtest["reserva_estimada"] = backtest["ultima_estimada"] - backtest["pagado_2007"]
+backtest["reserva_real"] = backtest["ultima_real (a 120 meses)"] - backtest["pagado_2007"]
+backtest["error_%"] = backtest["reserva_estimada"] / backtest["reserva_real"] - 1
+(backtest / [1e3, 1e3, 1e3, 1e3, 1e3, 1]).round(2)   # importes en millones de dólares
+
+#== md
+> Matiz: para los años más recientes, "120 meses" todavía no es el cierre definitivo, pero sí una muy buena aproximación.
+
+### ✏️ Ejercicio 4.1
+Calcula `error_total`: el error relativo de la reserva **total** (suma de todos los años) de esta compañía = reserva estimada total / reserva real total − 1. ¿El método se quedó corto o se pasó?
+
+#== code
+# >>> ALUMNO
+# error_total = ...
+# <<< ALUMNO
+# >>> SOLUCION
+error_total = backtest["reserva_estimada"].sum() / backtest["reserva_real"].sum() - 1
+# <<< SOLUCION
+print(f"Error de la reserva total: {error_total:+.1%}")
+
+#== code
+comprobar(lambda: error_total, backtest["reserva_estimada"].sum() / backtest["reserva_real"].sum() - 1,
+          "Suma primero (cociente de sumas) y después divide")
+
+#== md
+⭐ **Opcional:** cambia `COMPANIA` por otra (por ejemplo `"United Services Automobile Asn Grp"` o una pequeña) y repite. ¿En qué compañías acierta peor el chain-ladder? (Pista: en las pequeñas, por la regla ±2/√N de la sesión 4.)
+
+#== code
+cas.groupby("compania")["prima_devengada_neta"].sum().sort_values(ascending=False).head(15)
+
+#== md
+---
+## Resumen
+- El coste de siniestros del periodo = pagos + **variación de reservas** (incluido el IBNR). Una reserva corta infla el resultado de hoy.
+- Chain-ladder: factores ponderados por volumen (cociente de sumas) → CDF → última → reserva.
+- La reserva tiene **incertidumbre** importante (Mack, bootstrap), sobre todo en los años recientes.
+- El **P99,5** de la reserva enlaza con el capital de Solvencia II.
+- Con datos reales se puede hacer **back-testing**: comprobar a posteriori cuánto acertó el método.

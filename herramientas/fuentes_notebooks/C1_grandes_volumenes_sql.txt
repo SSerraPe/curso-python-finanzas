@@ -1,0 +1,341 @@
+#== md
+# C1 · Grandes volúmenes de datos y SQL (complementario, autónomo)
+
+**Tiempo estimado:** 60–90 min · **Requisitos:** sesiones 1 y 2
+
+{{SOLUCIONES}}
+
+**Pregunta:** *¿Qué hago cuando el fichero no cabe en Excel… o ni siquiera en la memoria de pandas? ¿Y cuando los datos están en una base de datos?*
+
+| Bloque | Contenido |
+|---|---|
+| 1 | Lectura eficiente con pandas: `usecols`, `dtype`, `chunksize` |
+| 2 | Parquet frente a CSV |
+| 3 | DuckDB: SQL directo sobre ficheros |
+| 4 | Bases de datos SQL desde Python (SQLite, SQLAlchemy, consultas parametrizadas) |
+| 5 | Polars, Dask y PySpark: cuándo usar cada uno |
+
+**Guía rápida de decisión**
+
+| Volumen | Herramienta recomendada |
+|---|---|
+| < 1 M filas | pandas sin más |
+| 1–50 M filas | pandas con tipos eficientes + **Parquet**, o **DuckDB** / **Polars** |
+| 50 M – miles de M | **DuckDB** / **Polars** (en un portátil); **Spark** si la empresa ya tiene un clúster (Databricks, Fabric…) |
+
+#== setup
+
+#== code
+import os
+import time
+import numpy as np
+import pandas as pd
+
+from curso_seguros.datos import DATA, OUTPUT, cargar_cartera
+from curso_seguros.datos import cargar_siniestros_referencia as cargar_siniestros
+from curso_seguros.comprobar import comprobar
+
+TMP = OUTPUT / "c1"
+TMP.mkdir(parents=True, exist_ok=True)
+
+#== md
+### Preparamos un fichero "grande"
+Multiplicamos la cartera por 5 (≈3,4 millones de filas) y la guardamos como CSV, el formato en que suelen llegar las extracciones. *Tarda 1–2 minutos; solo se hace una vez.*
+
+#== code
+FACTOR = 5
+ruta_csv = TMP / "cartera_grande.csv"
+if not ruta_csv.exists():
+    base = cargar_cartera()
+    partes = []
+    for k in range(FACTOR):
+        p = base.copy()
+        p["id_poliza"] = p["id_poliza"] + k * 10_000_000
+        p["prima_anual"] = (p["prima_anual"] * np.random.default_rng(k).normal(1, 0.05, len(p))).round(2)
+        partes.append(p)
+    pd.concat(partes).to_csv(ruta_csv, index=False)
+print(f"{ruta_csv.name}: {ruta_csv.stat().st_size / 1e6:,.0f} MB")
+
+#== md
+---
+# Bloque 1 · Lectura eficiente con pandas
+
+### Lectura "por defecto"
+
+#== code
+t = time.perf_counter()
+grande = pd.read_csv(ruta_csv)
+t_defecto = time.perf_counter() - t
+mem_defecto = grande.memory_usage(deep=True).sum() / 1e6
+print(f"{len(grande):,} filas | {t_defecto:.1f} s | {mem_defecto:,.0f} MB en memoria")
+grande.dtypes
+
+#== md
+### Tres trucos
+1. **`usecols`**: leer solo las columnas necesarias.
+2. **`dtype`**: tipos eficientes. Una columna de texto con 4 valores (canal) ocupa mucho menos como `category`, y un entero pequeño cabe en `int16`.
+3. **`parse_dates`**: fechas como fechas desde el principio.
+
+#== code
+t = time.perf_counter()
+ligero = pd.read_csv(ruta_csv, usecols=["id_poliza", "canal", "zona", "fecha_efecto", "prima_anual", "edad_conductor"],
+                     dtype={"canal": "category", "zona": "category", "edad_conductor": "int16", "prima_anual": "float32"},
+                     parse_dates=["fecha_efecto"])
+t_ligero = time.perf_counter() - t
+mem_ligero = ligero.memory_usage(deep=True).sum() / 1e6
+print(f"{t_ligero:.1f} s | {mem_ligero:,.0f} MB  →  {mem_defecto / mem_ligero:.0f} veces menos memoria")
+# (convertir fechas al leer puede hacer la lectura algo más lenta, pero ahorra memoria y conversiones posteriores)
+del grande
+
+#== md
+### `chunksize`: procesar por trozos lo que no cabe en memoria
+Se lee el fichero en bloques de N filas, se **agrega cada bloque** y se combinan los resultados. Solo hay un bloque en memoria cada vez.
+
+#== code
+acumulado = []
+for trozo in pd.read_csv(ruta_csv, usecols=["canal", "prima_anual"], chunksize=500_000):
+    acumulado.append(trozo.groupby("canal")["prima_anual"].agg(["sum", "count"]))
+por_trozos = pd.concat(acumulado).groupby(level=0).sum()
+por_trozos
+
+#== md
+> ⚠️ Por trozos se pueden **sumar** y **contar**. Una **media** hay que calcularla como suma total / conteo total, **nunca como media de las medias de cada trozo** (otra vez el cociente de sumas).
+
+### ✏️ Ejercicio 1.1
+Calcula por trozos (`chunksize=500_000`) la **prima anual media por zona**. Guarda el resultado (una Series con índice `zona`) en `media_zona`.
+
+#== code
+# >>> ALUMNO
+# partes = []
+# for trozo in pd.read_csv(ruta_csv, usecols=[...], chunksize=500_000):
+#     ...
+# media_zona = ...
+# <<< ALUMNO
+# >>> SOLUCION
+partes = []
+for trozo in pd.read_csv(ruta_csv, usecols=["zona", "prima_anual"], chunksize=500_000):
+    partes.append(trozo.groupby("zona")["prima_anual"].agg(["sum", "count"]))
+tot = pd.concat(partes).groupby(level=0).sum()
+media_zona = tot["sum"] / tot["count"]
+# <<< SOLUCION
+media_zona
+
+#== code
+comprobar(lambda: media_zona, ligero.groupby("zona", observed=True)["prima_anual"].mean().astype(float),
+          "Suma y cuenta en cada trozo, y divide al final", rtol=1e-3)
+
+#== md
+---
+# Bloque 2 · Parquet frente a CSV
+
+| | CSV | Parquet |
+|---|---|---|
+| Legible con el Bloc de notas | ✅ | ❌ (binario) |
+| Guarda los tipos (fechas, categorías) | ❌ | ✅ |
+| Comprimido | ❌ | ✅ (5–10 veces menos) |
+| Leer solo algunas columnas sin leer el resto | ❌ | ✅ (formato columnar) |
+
+#== code
+ruta_parquet = TMP / "cartera_grande.parquet"
+pd.read_csv(ruta_csv).to_parquet(ruta_parquet, index=False)
+
+t = time.perf_counter()
+_ = pd.read_parquet(ruta_parquet, columns=["canal", "prima_anual"])
+t_pq = time.perf_counter() - t
+t = time.perf_counter()
+_ = pd.read_csv(ruta_csv, usecols=["canal", "prima_anual"])
+t_csv = time.perf_counter() - t
+print(f"Tamaño: CSV {ruta_csv.stat().st_size / 1e6:,.0f} MB | Parquet {ruta_parquet.stat().st_size / 1e6:,.0f} MB")
+print(f"Leer 2 columnas: CSV {t_csv:.2f} s | Parquet {t_pq:.2f} s")
+
+#== md
+**Recomendación práctica:** el fichero que llega se convierte a Parquet **una vez** y a partir de ahí se trabaja siempre con el Parquet.
+
+---
+# Bloque 3 · DuckDB: SQL sobre ficheros, sin servidor
+
+DuckDB es una base de datos analítica que **se instala con pip** y consulta CSV, Parquet o DataFrames directamente con SQL. Procesa en paralelo y por bloques, así que maneja ficheros más grandes que la memoria.
+
+#== code
+import duckdb
+
+t = time.perf_counter()
+res = duckdb.sql(f"""
+    SELECT canal,
+           zona,
+           COUNT(*)                 AS polizas,
+           SUM(prima_anual)         AS prima_total,
+           AVG(edad_conductor)      AS edad_media
+    FROM '{ruta_parquet}'
+    WHERE fecha_efecto >= '2025-04-01'
+    GROUP BY canal, zona
+    ORDER BY prima_total DESC
+""").df()
+print(f"{time.perf_counter() - t:.2f} s")
+res.head(8)
+
+#== md
+También puede consultar un **DataFrame de pandas** que esté en memoria, por su nombre:
+
+#== code
+cartera = cargar_cartera()
+duckdb.sql("SELECT canal, ROUND(AVG(prima_anual), 2) AS prima_media FROM cartera GROUP BY canal").df()
+
+#== md
+### ✏️ Ejercicio 3.1
+Con DuckDB, sobre `ruta_parquet`, obtén un DataFrame `top_regiones` con las **5 regiones con más prima anual total**, con las columnas `region` y `prima_total`, ordenado de mayor a menor.
+
+#== code
+# >>> ALUMNO
+# top_regiones = duckdb.sql(f"""
+#     SELECT ...
+#     FROM '{ruta_parquet}'
+#     ...
+# """).df()
+# <<< ALUMNO
+# >>> SOLUCION
+top_regiones = duckdb.sql(f"""
+    SELECT region, SUM(prima_anual) AS prima_total
+    FROM '{ruta_parquet}'
+    GROUP BY region
+    ORDER BY prima_total DESC
+    LIMIT 5
+""").df()
+# <<< SOLUCION
+top_regiones
+
+#== code
+_esp = pd.read_parquet(ruta_parquet, columns=["region", "prima_anual"]).groupby("region")["prima_anual"].sum().nlargest(5)
+comprobar(lambda: top_regiones.set_index("region")["prima_total"], _esp, "GROUP BY region, ORDER BY ... DESC, LIMIT 5", rtol=1e-6)
+
+#== md
+---
+# Bloque 4 · Bases de datos SQL desde Python
+
+En la empresa, los datos suelen vivir en **SQL Server, Oracle, PostgreSQL, Snowflake…**. El patrón en Python es siempre el mismo:
+1. Crear una **conexión** (*engine*) con SQLAlchemy.
+2. Lanzar la consulta con `pd.read_sql` → DataFrame.
+
+Para practicar sin servidor usamos **SQLite**, una base de datos que es un único fichero.
+
+#== code
+from sqlalchemy import create_engine, text
+
+engine = create_engine(f"sqlite:///{TMP / 'aseguradora.db'}")
+cartera.to_sql("cartera", engine, if_exists="replace", index=False, chunksize=50_000)
+cargar_siniestros().to_sql("siniestros", engine, if_exists="replace", index=False)
+print("Base de datos creada con las tablas: cartera, siniestros")
+
+#== code
+consulta = """
+SELECT c.canal,
+       COUNT(DISTINCT c.id_poliza) AS polizas,
+       COUNT(s.id_siniestro)       AS siniestros,
+       SUM(s.importe)              AS coste
+FROM cartera c
+LEFT JOIN siniestros s ON s.id_poliza = c.id_poliza
+GROUP BY c.canal
+"""
+pd.read_sql(consulta, engine)
+
+#== md
+### ⚠️ Consultas parametrizadas: nunca construyas SQL con f-strings
+Si el valor de un filtro viene de fuera (un parámetro, un fichero, un usuario), **pegarlo en el texto del SQL es peligroso**: es la puerta de la *inyección SQL*, y además falla con comillas en los datos.
+
+#== code
+canal_usuario = "Directo' OR '1'='1"      # valor malicioso (o simplemente con una comilla)
+
+# ❌ MAL: el texto se pega tal cual → la condición siempre es cierta y devuelve TODO
+mal = pd.read_sql(f"SELECT COUNT(*) AS n FROM cartera WHERE canal = '{canal_usuario}'", engine)
+# ✅ BIEN: el valor viaja aparte como parámetro; la base de datos no lo interpreta como SQL
+bien = pd.read_sql(text("SELECT COUNT(*) AS n FROM cartera WHERE canal = :canal"), engine,
+                   params={"canal": canal_usuario})
+print("Con f-string:", mal["n"].iloc[0], "| Parametrizada:", bien["n"].iloc[0])
+
+#== md
+### ✏️ Ejercicio 4.1
+Escribe una consulta **parametrizada** que devuelva en `sin_grandes` los siniestros con importe **mayor que** `:umbral` del canal `:canal`, para `umbral=100000` y `canal="Agentes"`.
+
+#== code
+# >>> ALUMNO
+# sin_grandes = pd.read_sql(text("SELECT ... FROM siniestros WHERE ..."), engine, params={...})
+# <<< ALUMNO
+# >>> SOLUCION
+sin_grandes = pd.read_sql(text("SELECT * FROM siniestros WHERE importe > :umbral AND canal = :canal"),
+                          engine, params={"umbral": 100_000, "canal": "Agentes"})
+# <<< SOLUCION
+sin_grandes.head()
+
+#== code
+_s = cargar_siniestros()
+comprobar(lambda: len(sin_grandes), int(((_s["importe"] > 100_000) & (_s["canal"] == "Agentes")).sum()),
+          "WHERE importe > :umbral AND canal = :canal, con params={'umbral': 100000, 'canal': 'Agentes'}")
+
+#== md
+### Conexión a SQL Server en la empresa (no ejecutable en Colab)
+```python
+# pip install pyodbc   (y el "ODBC Driver 18 for SQL Server" instalado por IT)
+from sqlalchemy import create_engine
+engine = create_engine(
+    "mssql+pyodbc://@SERVIDOR/BASE_DE_DATOS"
+    "?driver=ODBC+Driver+18+for+SQL+Server&trusted_connection=yes&TrustServerCertificate=yes"
+)
+df = pd.read_sql(text("SELECT ... WHERE periodo = :p"), engine, params={"p": "2025-09"})
+```
+- `trusted_connection=yes` usa tu usuario de Windows: **sin contraseñas en el código**.
+- Si hace falta contraseña, se guarda en una variable de entorno o en un gestor de secretos, nunca en el notebook.
+
+---
+# Bloque 5 · Polars, Dask y PySpark
+
+### Polars (modo *lazy*)
+Una alternativa moderna a pandas, muy rápida. En modo *lazy* primero describes la consulta y Polars la optimiza antes de ejecutarla (solo lee lo necesario).
+
+#== code
+import polars as pl
+
+t = time.perf_counter()
+res_pl = (pl.scan_parquet(ruta_parquet)
+            .filter(pl.col("edad_conductor") < 30)
+            .group_by("canal")
+            .agg(pl.len().alias("polizas"), pl.col("prima_anual").mean().alias("prima_media"))
+            .sort("polizas", descending=True)
+            .collect())
+print(f"{time.perf_counter() - t:.2f} s")
+res_pl
+
+#== md
+### Dask y PySpark
+- **Dask** imita la API de pandas pero reparte el trabajo en trozos y núcleos. Útil si ya tienes mucho código pandas.
+- **PySpark** es la herramienta para **clústeres** (Databricks, Microsoft Fabric, EMR…). En un portátil es más lenta que DuckDB o Polars por la sobrecarga de arrancar Spark. Úsala si la empresa **ya** trabaja en Spark.
+
+#== code
+import dask.dataframe as dd
+
+t = time.perf_counter()
+ddf = dd.read_parquet(ruta_parquet, columns=["canal", "prima_anual"])
+print(ddf.groupby("canal")["prima_anual"].sum().compute())
+print(f"{time.perf_counter() - t:.2f} s")
+
+#== md
+**PySpark** (solo como referencia; requiere Java y es pesado para Colab):
+```python
+from pyspark.sql import SparkSession, functions as F
+spark = SparkSession.builder.appName("cartera").getOrCreate()
+sdf = spark.read.parquet("cartera_grande.parquet")
+sdf.groupBy("canal").agg(F.sum("prima_anual").alias("prima")).show()
+```
+
+#== code
+# Limpieza: borrar los ficheros grandes generados
+for f in TMP.glob("cartera_grande.*"):
+    f.unlink()
+print("Ficheros temporales borrados")
+
+#== md
+---
+## Resumen
+- Antes de cambiar de herramienta: **`usecols` + `dtype` + Parquet** resuelven la mayoría de los casos.
+- Lo que no cabe en memoria se procesa **por trozos** (sumas y conteos, nunca medias de medias) o con **DuckDB**.
+- SQL desde Python: SQLAlchemy + `pd.read_sql` y **siempre consultas parametrizadas**.
+- Polars y DuckDB son hoy la opción más rápida en un portátil; Spark, si la empresa ya tiene clúster.

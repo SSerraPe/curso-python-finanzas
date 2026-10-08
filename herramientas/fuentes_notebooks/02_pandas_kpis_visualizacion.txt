@@ -1,0 +1,481 @@
+#== md
+# Sesión 2 · De la cartera al resultado técnico: pandas, NumPy y visualización
+
+**Pregunta de negocio:** *¿Cuánto ganamos (o perdemos) en 2025, en qué canales y en qué segmentos de clientes?*
+
+{{SOLUCIONES}}
+
+| Bloque | Contenido | Min |
+|---|---|---|
+| 1 | Carga, exploración y limpieza; NumPy vectorizado | 25 |
+| 2 | Unir tablas (BUSCARV) y calcular la cuenta técnica | 25 |
+| 3 | Portafolios y segmentos: ¿dónde se pierde dinero? | 20 |
+| 4 | Visualización: matplotlib, seaborn y plotly | 25 |
+| ⭐ | Demo: ¿y si fueran 50 millones de filas? | 5 |
+
+**Los datos.** 677.991 pólizas reales de RC de autos (dataset público *freMTPL2*) a las que hemos añadido canal, fechas y prima (simulados). Ver `docs/03_caso_de_uso.md`.
+
+#== setup
+
+#== code
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from curso_seguros.datos import cargar_cartera, cargar_siniestros_referencia, DATA, OUTPUT
+from curso_seguros.comprobar import comprobar
+
+pd.set_option("display.float_format", lambda x: f"{x:,.2f}")
+pd.set_option("display.max_columns", 30)
+
+#== md
+---
+# Bloque 1 · Carga, exploración y limpieza
+
+### Pregunta diagnóstica (repaso)
+Tenemos 2 pólizas. A: prima 100 €, siniestros 300 €. B: prima 900 €, siniestros 450 €. ¿Cuál es la siniestralidad **de la cartera**?
+
+- (a) 175 % → media de 300 % y 50 %
+- (b) 75 % → (300 + 450) / (100 + 900)
+- (c) 125 %
+
+<details><summary>Respuesta</summary>
+
+**(b)**. Un ratio de grupo es siempre un **cociente de sumas**: Σ costes / Σ primas. Promediar ratios individuales da el mismo peso a una póliza de 100 € que a una de 900 €. Esta regla la usaremos durante todo el curso.
+</details>
+
+#== code
+cartera = cargar_cartera()           # lee data/cartera/cartera_2025.parquet
+siniestros = cargar_siniestros_referencia()
+
+print(cartera.shape, siniestros.shape)
+cartera.head()
+
+#== md
+> **Parquet** es un formato de fichero para tablas: guarda los tipos de dato, ocupa ~5 veces menos que un CSV y se lee mucho más rápido. Lo veremos al final.
+
+### Primer vistazo: `info()` y `describe()`
+
+#== code
+cartera.info()
+
+#== code
+cartera.describe().T
+
+#== md
+**¿Qué te llama la atención?** Mira el máximo de `antig_vehiculo` (100 años) y de `edad_conductor` (100). En los sistemas reales, 99/100 suele ser un código de "desconocido" o un error de captura.
+
+#== code
+cartera["antig_vehiculo"].value_counts().sort_index().tail(8)
+
+#== code
+siniestros.describe(percentiles=[0.5, 0.9, 0.99, 0.999])["importe"]
+
+#== md
+Los importes tienen una **cola muy pesada**: la mediana es ~1.170 €, pero el máximo supera los 4 millones. Lo estudiaremos en la sesión 4. De momento basta con saber que **un único siniestro puede mover el resultado de un segmento entero**.
+
+### Chequeos básicos de calidad
+
+#== code
+print("Pólizas duplicadas:", cartera["id_poliza"].duplicated().sum())
+print("Nulos por columna:\n", cartera.isna().sum()[cartera.isna().sum() > 0])
+print("Siniestros de pólizas que no están en cartera:",
+      (~siniestros["id_poliza"].isin(cartera["id_poliza"])).sum())
+print("Canales:", cartera["canal"].unique())
+
+#== md
+### Limpieza: valores extremos
+Decidimos (y **documentamos**) limitar la antigüedad del vehículo a 25 años y la edad del conductor a 90. `clip` es como un `MIN(MAX(x; inferior); superior)` aplicado a toda la columna.
+
+#== code
+cartera["antig_vehiculo"] = cartera["antig_vehiculo"].clip(upper=25)
+cartera["edad_conductor"] = cartera["edad_conductor"].clip(upper=90)
+cartera[["antig_vehiculo", "edad_conductor"]].max()
+
+#== md
+### NumPy y vectorización: la exposición y la prima devengada
+
+- **Exposición** = parte del año que la póliza ha estado en vigor (en años-póliza).
+- **Prima devengada** = prima anual × exposición. Es el **ingreso** contable del periodo: una póliza de 600 € que entró el 1 de julio solo ha generado unos 300 € de ingreso en 2025.
+
+En Excel arrastrarías la fórmula hacia abajo. En pandas/NumPy se escribe **una vez** para toda la columna (*vectorización*):
+
+#== code
+cartera["exposicion"] = (cartera["fecha_vencimiento"] - cartera["fecha_efecto"]).dt.days / 365
+cartera["prima_devengada"] = cartera["prima_anual"] * cartera["exposicion"]
+cartera[["fecha_efecto", "fecha_vencimiento", "exposicion", "prima_anual", "prima_devengada"]].head()
+
+#== md
+¿Por qué no un bucle `for` como en la sesión 1? Compara los tiempos:
+
+#== code
+import time
+
+t0 = time.perf_counter()
+resultado_bucle = []
+for prima, expo in zip(cartera["prima_anual"], cartera["exposicion"]):
+    resultado_bucle.append(prima * expo)
+t_bucle = time.perf_counter() - t0
+
+t0 = time.perf_counter()
+resultado_vector = cartera["prima_anual"].to_numpy() * cartera["exposicion"].to_numpy()
+t_vector = time.perf_counter() - t0
+
+print(f"Bucle: {t_bucle:.3f} s | Vectorizado: {t_vector:.4f} s | {t_bucle / t_vector:,.0f} veces más rápido")
+
+#== md
+`np.where` es el `SI()` vectorizado:
+
+#== code
+cartera["es_joven"] = np.where(cartera["edad_conductor"] < 25, "Sí", "No")
+cartera["es_joven"].value_counts()
+
+#== md
+### ✏️ Ejercicio 1.1
+1. Calcula `prima_devengada_total`: la suma de la prima devengada de toda la cartera (los **ingresos** de 2025).
+2. Calcula `exposicion_por_canal`: una Series con la suma de `exposicion` por canal.
+
+#== code
+# >>> ALUMNO
+# prima_devengada_total = ...
+# exposicion_por_canal = ...
+# <<< ALUMNO
+# >>> SOLUCION
+prima_devengada_total = cartera["prima_devengada"].sum()
+exposicion_por_canal = cartera.groupby("canal")["exposicion"].sum()
+# <<< SOLUCION
+print(f"{prima_devengada_total:,.0f} €")
+exposicion_por_canal
+
+#== code
+comprobar(prima_devengada_total, (cartera["prima_anual"] * cartera["exposicion"]).sum(), "Suma la columna prima_devengada")
+comprobar(exposicion_por_canal, cartera.pivot_table(index="canal", values="exposicion", aggfunc="sum")["exposicion"],
+          "groupby('canal')['exposicion'].sum()")
+
+#== md
+---
+# Bloque 2 · Unir tablas y calcular la cuenta técnica
+
+### Paso 1: siniestros por póliza
+La tabla de siniestros tiene **una fila por siniestro**. Para unirla a la cartera necesitamos **una fila por póliza**. Primero agregamos:
+
+#== code
+sin_por_poliza = (siniestros
+                  .groupby("id_poliza")
+                  .agg(n_siniestros=("id_siniestro", "count"),
+                       coste_siniestros=("importe", "sum")))
+sin_por_poliza.head()
+
+#== md
+> Esta sintaxis (`.agg(nombre_nuevo=("columna", "funcion"))`) se llama *named aggregation*. Es la forma más legible de hacer varios SUMAR.SI / CONTAR.SI a la vez.
+
+### Paso 2: `merge` = BUSCARV (pero mejor)
+
+| | BUSCARV | `merge` |
+|---|---|---|
+| Trae varias columnas a la vez | ❌ una fórmula por columna | ✅ |
+| Avisa si la clave está duplicada | ❌ devuelve la primera | ✅ con `validate=` |
+| Muestra qué no ha cruzado | ❌ `#N/A` | ✅ con `indicator=True` |
+
+`how="left"` conserva **todas** las pólizas de la cartera, también las que no tienen siniestros. Esas quedan con `NaN` (vacío), que rellenamos con 0.
+
+#== code
+df = cartera.merge(sin_por_poliza, left_on="id_poliza", right_index=True, how="left",
+                   validate="one_to_one")
+df[["n_siniestros", "coste_siniestros"]] = df[["n_siniestros", "coste_siniestros"]].fillna(0)
+print(df.shape)
+df[df["n_siniestros"] > 0][["id_poliza", "canal", "prima_devengada", "n_siniestros", "coste_siniestros"]].head()
+
+#== md
+### Paso 3: comisiones por canal (otro BUSCARV)
+
+#== code
+parametros = pd.read_excel(DATA / "entrada" / "parametros" / "parametros_2025.xlsx", sheet_name=None)
+print(parametros.keys())          # sheet_name=None lee TODAS las hojas en un diccionario
+comisiones = parametros["Comisiones"]
+comisiones
+
+#== code
+df = df.merge(comisiones[["canal", "tasa_comision"]], on="canal", how="left", validate="many_to_one")
+df["comisiones"] = df["prima_devengada"] * df["tasa_comision"]
+
+#== md
+### Paso 4: gastos de estructura
+Los gastos de estructura reales de 2025 están en `gastos_estructura_2025.xlsx` (por mes, centro de coste y partida). Hoy los repartimos de forma **simple**, proporcionalmente a la prima devengada. En la sesión 3 haremos el reparto bueno, con claves por centro de coste.
+
+#== code
+gastos = pd.read_excel(DATA / "entrada" / "gastos_estructura_2025.xlsx")
+print(gastos.head(3))
+total_gastos = gastos["importe"].sum()
+df["gastos_estructura"] = total_gastos * df["prima_devengada"] / df["prima_devengada"].sum()
+print(f"Gastos de estructura 2025: {total_gastos:,.0f} €")
+
+#== md
+### Paso 5: margen técnico por póliza
+
+#== code
+df["margen"] = df["prima_devengada"] - df["coste_siniestros"] - df["comisiones"] - df["gastos_estructura"]
+df[["id_poliza", "canal", "prima_devengada", "coste_siniestros", "comisiones", "gastos_estructura", "margen"]].head()
+
+#== md
+### La cuenta técnica por canal
+**Regla de oro:** primero se **suman** importes y después se calculan los **ratios**.
+
+#== code
+cuenta = df.groupby("canal").agg(
+    polizas=("id_poliza", "count"),
+    exposicion=("exposicion", "sum"),
+    primas=("prima_devengada", "sum"),
+    siniestros=("coste_siniestros", "sum"),
+    n_siniestros=("n_siniestros", "sum"),
+    comisiones=("comisiones", "sum"),
+    gastos=("gastos_estructura", "sum"),
+    margen=("margen", "sum"),
+)
+cuenta.loc["Total"] = cuenta.sum()
+
+cuenta["siniestralidad"] = cuenta["siniestros"] / cuenta["primas"]
+cuenta["ratio_gastos"] = (cuenta["comisiones"] + cuenta["gastos"]) / cuenta["primas"]
+cuenta["ratio_combinado"] = cuenta["siniestralidad"] + cuenta["ratio_gastos"]
+cuenta["frecuencia"] = cuenta["n_siniestros"] / cuenta["exposicion"]          # siniestros por año-póliza
+cuenta["coste_medio"] = cuenta["siniestros"] / cuenta["n_siniestros"]
+cuenta
+
+#== md
+**Lectura para Dirección:** con un ratio combinado por encima del 100 %, cada euro de prima cuesta más de un euro. ¿Qué canal está en esa situación?
+
+### ⚠️ Lo que NO hay que hacer: promediar ratios
+
+#== code
+df["siniestralidad_poliza"] = df["coste_siniestros"] / df["prima_devengada"]
+mal = df.groupby("canal")["siniestralidad_poliza"].mean()
+bien = cuenta["siniestralidad"].drop("Total")
+pd.DataFrame({"media de ratios (MAL)": mal, "cociente de sumas (BIEN)": bien})
+
+#== md
+La media de ratios sale **disparatada**: una póliza que solo estuvo en vigor 3 días y tuvo un siniestro aporta una "siniestralidad" de miles de por cien. Moraleja: **SUMAR.SI / SUMAR.SI, nunca PROMEDIO.SI de una columna de ratios.**
+
+### ✏️ Ejercicio 2.1
+Construye `cuenta_zona`: igual que `cuenta` pero agrupando por `zona` (A = rural … F = centro urbano). Solo necesitas las columnas `primas`, `siniestros`, `margen` y `siniestralidad` (= siniestros / primas). Sin fila Total.
+
+#== code
+# >>> ALUMNO
+# cuenta_zona = df.groupby(...).agg(...)
+# cuenta_zona["siniestralidad"] = ...
+# <<< ALUMNO
+# >>> SOLUCION
+cuenta_zona = df.groupby("zona").agg(primas=("prima_devengada", "sum"),
+                                      siniestros=("coste_siniestros", "sum"),
+                                      margen=("margen", "sum"))
+cuenta_zona["siniestralidad"] = cuenta_zona["siniestros"] / cuenta_zona["primas"]
+# <<< SOLUCION
+cuenta_zona
+
+#== code
+_esp = df.groupby("zona")[["coste_siniestros", "prima_devengada"]].sum()
+comprobar(lambda: cuenta_zona["siniestralidad"], _esp["coste_siniestros"] / _esp["prima_devengada"],
+          "Agrupa por 'zona', suma y luego divide (cociente de sumas)")
+
+#== md
+¿Te sorprende la zona B? Mira cuántos siniestros grandes tiene:
+
+#== code
+grandes = siniestros[siniestros["importe"] > 100_000].merge(cartera[["id_poliza", "zona"]], on="id_poliza")
+grandes.groupby("zona")["importe"].agg(["count", "sum"])
+
+#== md
+---
+# Bloque 3 · Portafolios y segmentos: ¿dónde se pierde dinero?
+
+### Tramos con `pd.cut` (como la función BUSCAR con rangos)
+
+#== code
+df["tramo_edad"] = pd.cut(df["edad_conductor"], bins=[17, 25, 35, 50, 65, 90],
+                          labels=["18-25", "26-35", "36-50", "51-65", "66+"])
+df["tramo_bm"] = pd.cut(df["bonus_malus"], bins=[0, 50, 70, 100, 300],
+                        labels=["50 (máx. bonif.)", "51-70", "71-100", ">100 (malus)"])
+df["tramo_edad"].value_counts().sort_index()
+
+#== code
+por_edad = df.groupby("tramo_edad", observed=True).agg(
+    exposicion=("exposicion", "sum"), primas=("prima_devengada", "sum"),
+    siniestros=("coste_siniestros", "sum"), margen=("margen", "sum"))
+por_edad["siniestralidad"] = por_edad["siniestros"] / por_edad["primas"]
+por_edad
+
+#== md
+> `observed=True` le dice a pandas que muestre solo los tramos que existen. Ponlo siempre que agrupes por una columna creada con `pd.cut` (en pandas 3 ya es el valor por defecto).
+
+### Tabla dinámica: canal × tramo de edad
+
+#== code
+tabla = df.pivot_table(index="canal", columns="tramo_edad", values=["coste_siniestros", "prima_devengada"],
+                       aggfunc="sum", observed=True)
+siniestralidad_canal_edad = tabla["coste_siniestros"] / tabla["prima_devengada"]
+siniestralidad_canal_edad.style.format("{:.0%}").background_gradient(cmap="RdYlGn_r", vmin=0.4, vmax=1.5)
+
+#== md
+**Hallazgo:** los conductores de 18–25 años son el segmento con peor siniestralidad en casi todos los canales. La tarifa actual no los está cobrando bien, y ese es el punto de partida de la sesión 5.
+
+**Pero cuidado:** el 365 % de Agentes 18–25 se explica en gran parte por **dos siniestros** de 4,1 M€ y 1,4 M€ (conductores de 19 y 20 años). ¿Es un problema estructural o mala suerte? Lo responderemos con intervalos de confianza en la sesión 4.
+
+### ✏️ Ejercicio 3.1
+Calcula `top5_regiones`: las 5 regiones con **peor margen** (más negativo), como un DataFrame con columnas `primas`, `margen` y `margen_sobre_primas` (= margen / primas), ordenado de peor a mejor.
+
+#== code
+# >>> ALUMNO
+# top5_regiones = ...
+# <<< ALUMNO
+# >>> SOLUCION
+top5_regiones = df.groupby("region").agg(primas=("prima_devengada", "sum"), margen=("margen", "sum"))
+top5_regiones["margen_sobre_primas"] = top5_regiones["margen"] / top5_regiones["primas"]
+top5_regiones = top5_regiones.sort_values("margen").head(5)
+# <<< SOLUCION
+top5_regiones
+
+#== code
+_r = df.groupby("region")["margen"].sum().nsmallest(5)
+comprobar(lambda: top5_regiones["margen"], _r,
+          "groupby('region'), suma, sort_values('margen') y head(5)")
+
+#== md
+⭐ **Opcional:** repite el análisis por `tramo_bm`. ¿La tarifa actual cobra bien el bonus-malus? (Pista: la tarifa actual sí incluye el bonus-malus.)
+
+#== code
+# Tu código aquí (opcional)
+
+#== md
+---
+# Bloque 4 · Visualización
+
+Tres librerías, tres usos:
+
+| Librería | Para qué |
+|---|---|
+| **matplotlib** | Control total; gráficos estáticos para PDF y PowerPoint |
+| **seaborn** | Gráficos estadísticos bonitos con poco código (sobre matplotlib) |
+| **plotly** | Gráficos **interactivos** (zoom, tooltip) para dashboards y HTML |
+
+### matplotlib: el gráfico clásico de exposición + ratio
+
+#== code
+fig, ax1 = plt.subplots(figsize=(9, 4))
+x = por_edad.index.astype(str)
+ax1.bar(x, por_edad["exposicion"], color="#cfd8dc", label="Exposición")
+ax1.set_ylabel("Exposición (años-póliza)")
+ax2 = ax1.twinx()                          # segundo eje Y
+ax2.plot(x, por_edad["siniestralidad"], color="#c0392b", marker="o", lw=2, label="Siniestralidad")
+ax2.axhline(1, color="grey", ls="--", lw=1)
+ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+ax2.set_ylabel("Siniestralidad")
+ax1.set_title("Mucho volumen en 36-50; las pérdidas, en 18-25")
+fig.legend(loc="upper right", bbox_to_anchor=(0.9, 0.88))
+plt.show()
+
+#== md
+> 💡 **El título cuenta la conclusión**, no describe el gráfico. "Siniestralidad por edad" describe; "Las pérdidas se concentran en 18–25" informa.
+
+### Cascada (waterfall): de las primas al margen
+
+#== code
+t = cuenta.loc["Total"]
+pasos = {"Primas": t["primas"], "Siniestros": -t["siniestros"], "Comisiones": -t["comisiones"],
+         "Gastos": -t["gastos"]}
+acumulado = np.cumsum([0] + list(pasos.values())[:-1])
+fig, ax = plt.subplots(figsize=(8, 4))
+colores = ["#1f4e79"] + ["#c0392b"] * 3
+ax.bar(list(pasos), [abs(v) / 1e6 for v in pasos.values()],
+       bottom=[(a + min(v, 0)) / 1e6 for a, v in zip(acumulado, pasos.values())], color=colores)
+ax.bar("Margen", t["margen"] / 1e6, color="#27ae60" if t["margen"] > 0 else "#c0392b")
+for i, v in enumerate(list(pasos.values()) + [t["margen"]]):
+    ax.text(i, (acumulado[i] if i < len(acumulado) else 0) / 1e6 + max(v, 0) / 1e6 + 0.5,
+            f"{v / 1e6:,.1f}", ha="center")
+ax.set_ylabel("M€")
+ax.set_title(f"Ratio combinado {t['ratio_combinado']:.1%}: el margen es solo el {t['margen'] / t['primas']:.1%} de las primas")
+plt.show()
+
+#== md
+### seaborn: mapa de calor en 2 líneas
+
+#== code
+plt.figure(figsize=(8, 3.5))
+sns.heatmap(siniestralidad_canal_edad, annot=True, fmt=".0%", cmap="RdYlGn_r", vmin=0.4, vmax=1.5,
+            cbar_kws={"label": "Siniestralidad"})
+plt.title("Siniestralidad por canal y edad del conductor")
+plt.show()
+
+#== md
+### plotly: treemap interactivo
+El tamaño de cada rectángulo es la prima y el color, la siniestralidad. Pasa el ratón por encima y haz clic para entrar en un canal.
+
+#== code
+import plotly.express as px
+
+arbol = df.groupby(["canal", "region"], as_index=False).agg(primas=("prima_devengada", "sum"),
+                                                             siniestros=("coste_siniestros", "sum"),
+                                                             margen=("margen", "sum"))
+arbol["siniestralidad"] = arbol["siniestros"] / arbol["primas"]
+fig = px.treemap(arbol, path=[px.Constant("Total"), "canal", "region"], values="primas",
+                 color="siniestralidad", color_continuous_scale="RdYlGn_r", range_color=(0.4, 1.2),
+                 hover_data={"margen": ":,.0f"}, title="Primas (tamaño) y siniestralidad (color)")
+fig.update_layout(height=550, margin=dict(t=50, l=10, r=10, b=10))
+fig.show()
+
+#== md
+Un gráfico de plotly se puede guardar como **HTML autónomo**. Se envía por correo y se abre en cualquier navegador sin Python:
+
+#== code
+(OUTPUT / "graficos").mkdir(parents=True, exist_ok=True)
+fig.write_html(OUTPUT / "graficos" / "treemap_siniestralidad.html")
+print("Guardado en output/graficos/treemap_siniestralidad.html")
+
+#== md
+### ✏️ Ejercicio 4.1
+Haz un gráfico de barras horizontales del **margen por canal** (sin la fila Total), en rojo si es negativo y en azul si es positivo, con un título que cuente la conclusión. Guarda la figura en la variable `fig_margen`.
+
+#== code
+# >>> ALUMNO
+# fig_margen, ax = plt.subplots(figsize=(7, 3))
+# ...
+# plt.show()
+# <<< ALUMNO
+# >>> SOLUCION
+m = cuenta["margen"].drop("Total").sort_values()
+fig_margen, ax = plt.subplots(figsize=(7, 3))
+ax.barh(m.index, m / 1e6, color=np.where(m < 0, "#c0392b", "#1f4e79"))
+ax.axvline(0, color="black", lw=0.8)
+ax.set_xlabel("Margen técnico 2025 (M€)")
+ax.set_title(f"{m.idxmin()} es el único canal en pérdidas")
+plt.show()
+# <<< SOLUCION
+
+#== code
+comprobar(fig_margen is not ... and len(fig_margen.axes) >= 1, True, "Crea la figura con fig_margen, ax = plt.subplots()")
+
+#== md
+---
+# ⭐ Demo: ¿y si fueran 50 millones de filas?
+
+Excel se detiene en 1.048.576 filas. pandas trabaja en memoria y llega cómodamente a decenas de millones si el formato es eficiente. Más allá, **DuckDB** permite hacer SQL directamente sobre ficheros sin cargarlos enteros. (Todo esto se desarrolla en el notebook complementario **C1**.)
+
+#== code
+import duckdb
+
+ruta = str(DATA / "cartera" / "cartera_2025.parquet")
+duckdb.sql(f"""
+    SELECT canal, COUNT(*) AS polizas, ROUND(SUM(prima_anual)) AS prima_anual
+    FROM '{ruta}'
+    GROUP BY canal ORDER BY prima_anual DESC
+""").df()
+
+#== md
+---
+## Resumen de la sesión
+- `info`, `describe`, `value_counts` e `isna` para conocer los datos **antes** de calcular nada.
+- Vectorizar (columna × columna) en vez de bucles: cientos de veces más rápido.
+- `groupby().agg()` y `merge()` sustituyen a SUMAR.SI.CONJUNTO y BUSCARV.
+- **Ratios = cociente de sumas.**
+- Un gráfico con un título que cuenta la conclusión vale más que tres gráficos descriptivos.
+
+**Próxima sesión:** automatizamos todo esto como proceso de cierre mensual, con ficheros sucios, controles, presupuesto, Excel, PDF y correos.

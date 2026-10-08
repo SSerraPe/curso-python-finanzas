@@ -1,0 +1,5 @@
+# Librerías que Google Colab NO trae preinstaladas (el resto ya están).
+# Las instala automáticamente la celda "⚙️ Ejecuta esta celda primero" de cada notebook.
+xlsxwriter>=3.2
+fpdf2>=2.8
+pandera>=0.34,<0.35

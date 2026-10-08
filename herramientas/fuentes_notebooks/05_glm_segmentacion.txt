@@ -1,0 +1,415 @@
+#== md
+# Sesión 5 · Drivers de rentabilidad: GLM y segmentación
+
+**Preguntas de negocio:**
+1. ¿Qué características de la póliza **explican** el coste, separando el efecto de cada una?
+2. ¿Qué **segmentos** destruyen margen y cuáles son los más rentables (y por tanto se puede crecer en ellos)?
+3. Si ajustamos precios según el modelo, ¿cómo cambia el margen por segmento?
+
+{{SOLUCIONES}}
+
+| Bloque | Contenido | Min |
+|---|---|---|
+| 0 | Intuición: la tarifa es una tabla de factores | 10 |
+| 1 | GLM de frecuencia: relatividades | 35 |
+| 2 | GLM de coste medio y prima pura | 15 |
+| 3 | Segmentación con árboles de decisión | 20 |
+| 4 | Validación y simulación de impacto | 20 |
+
+#== setup
+
+#== code
+import warnings
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+from curso_seguros.datos import cargar_base_polizas, cargar_siniestros_referencia
+from curso_seguros.graficos import curva_lift, curva_lorenz, gini
+from curso_seguros.comprobar import comprobar
+
+pd.set_option("display.float_format", lambda x: f"{x:,.3f}")
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+df = cargar_base_polizas()
+df["tramo_bm"] = pd.cut(df["bonus_malus"], [0, 50, 70, 100, 300], labels=["50", "51-70", "71-100", ">100"])
+df["grupo_potencia"] = pd.cut(df["potencia"], [0, 5, 7, 9, 20], labels=["4-5", "6-7", "8-9", "10+"])
+df["grupo_antig"] = pd.cut(df["antig_vehiculo"], [-1, 2, 9, 25], labels=["0-2", "3-9", "10+"])
+df["n"] = df["n_siniestros"].clip(upper=4)     # limitamos a 4 siniestros por póliza (práctica habitual)
+print(df.shape)
+
+#== md
+---
+# Bloque 0 · La tarifa es una tabla de factores
+
+Una tarifa de seguros se construye casi siempre de forma **multiplicativa**:
+
+$$\text{Prima} = \text{Base} \times f_{\text{edad}} \times f_{\text{zona}} \times f_{\text{bonus-malus}} \times \dots$$
+
+Es exactamente la tabla de coeficientes que se mantiene en Excel. El reto es **estimar los factores**. La forma ingenua es el análisis *univariante* (variable a variable):
+
+#== code
+def univariante(df, var):
+    t = df.groupby(var, observed=True).agg(expo=("exposicion", "sum"), n=("n", "sum"))
+    t["frecuencia"] = t["n"] / t["expo"]
+    t["factor"] = t["frecuencia"] / (t["n"].sum() / t["expo"].sum())
+    return t
+
+univariante(df, "tramo_edad")
+
+#== code
+pd.crosstab(df["tramo_edad"], df["tramo_bm"], values=df["exposicion"], aggfunc="sum", normalize="index").style.format("{:.0%}")
+
+#== md
+**El problema:** los jóvenes casi nunca tienen bonificación máxima (bonus-malus 50), porque **empiezan en 100**. El univariante de edad está mezclando el efecto "edad" con el efecto "bonus-malus". ¿Cuánto es de cada uno?
+
+Un **GLM (modelo lineal generalizado)** estima todos los factores **a la vez**, de forma que cada uno mide su efecto *manteniendo constantes los demás*.
+
+---
+# Bloque 1 · GLM de frecuencia (Poisson)
+
+Ingredientes:
+- **Variable respuesta:** número de siniestros `n`.
+- **Familia Poisson:** la natural para conteos (sesión 4).
+- **Enlace log:** hace el modelo **multiplicativo** → los coeficientes se convierten en factores con `exp()`.
+- **Offset log(exposición):** una póliza que estuvo en vigor medio año "tiene derecho" a la mitad de siniestros.
+- **Nivel base** (`Treatment(...)`): el factor de referencia = 1. Se elige el nivel **con más exposición**.
+
+### Separar entrenamiento y test
+Para evaluar el modelo con honestidad, lo ajustamos con el 80 % de las pólizas y lo evaluamos con el 20 % restante, que el modelo **no ha visto**.
+
+#== code
+rng = np.random.default_rng(42)
+df["test"] = rng.random(len(df)) < 0.2
+train, test = df[~df["test"]].copy(), df[df["test"]].copy()
+print(f"Entrenamiento: {len(train):,} pólizas | Test: {len(test):,}")
+
+#== code
+formula = ("n ~ C(tramo_edad, Treatment('36-50')) + C(tramo_bm, Treatment('50')) + C(zona, Treatment('C'))"
+           " + C(grupo_potencia, Treatment('6-7')) + C(grupo_antig, Treatment('3-9')) + C(combustible)")
+
+glm_frec = smf.glm(formula, data=train, family=sm.families.Poisson(),
+                   offset=np.log(train["exposicion"])).fit()
+print(glm_frec.summary().tables[1])
+
+#== md
+### De coeficientes a factores (relatividades)
+`exp(coeficiente)` es el **factor multiplicativo** respecto al nivel base. El intervalo de confianza se transforma igual.
+
+#== code
+def tabla_relatividades(modelo):
+    t = pd.DataFrame({"factor": np.exp(modelo.params),
+                      "ic_inf": np.exp(modelo.conf_int()[0]),
+                      "ic_sup": np.exp(modelo.conf_int()[1]),
+                      "p_valor": modelo.pvalues})
+    t.index = (t.index.str.replace(r"C\((\w+).*?\)\[T\.(.+)\]", r"\1 = \2", regex=True))
+    t["significativo"] = np.where(t["p_valor"] < 0.05, "sí", "no")
+    return t
+
+relatividades = tabla_relatividades(glm_frec)
+relatividades
+
+#== md
+**Cómo se lee:**
+- `Intercept` es la frecuencia del perfil base (36–50 años, BM 50, zona C, potencia 6–7, vehículo de 3–9 años, diésel).
+- `tramo_bm = >100` ≈ 7,6: un conductor con malus tiene **7,6 veces** más siniestros que uno con bonificación máxima, *a igualdad del resto*.
+- `tramo_edad = 18-25` ≈ 1 y **no significativo**: una vez descontado el bonus-malus, **la edad joven no añade frecuencia**. El "doble de frecuencia" del univariante se debía al bonus-malus, que **la tarifa actual ya cobra**.
+- `tramo_edad = 26-35` ≈ 0,67: estos conductores tienen **un tercio menos** de siniestros que su bonus-malus sugiere. Es una oportunidad comercial.
+
+#== code
+edad = relatividades[relatividades.index.str.startswith("tramo_edad")]
+uni = univariante(df, "tramo_edad")
+fig, ax = plt.subplots(figsize=(8, 3.8))
+ax.plot(uni.index.astype(str), uni["factor"] / uni.loc["36-50", "factor"], "o--", color="grey", label="Univariante")
+niveles = ["18-25", "26-35", "36-50", "51-65", "66+"]
+glm_f = [1.0 if n == "36-50" else edad.loc[f"tramo_edad = {n}", "factor"] for n in niveles]
+lo = [1.0 if n == "36-50" else edad.loc[f"tramo_edad = {n}", "ic_inf"] for n in niveles]
+hi = [1.0 if n == "36-50" else edad.loc[f"tramo_edad = {n}", "ic_sup"] for n in niveles]
+ax.plot(niveles, glm_f, "o-", color="#1f4e79", label="GLM (controlando el resto)")
+ax.fill_between(niveles, lo, hi, color="#1f4e79", alpha=0.15)
+ax.axhline(1, color="k", lw=0.6)
+ax.set_title("El efecto 'joven' desaparece al controlar el bonus-malus")
+ax.set_ylabel("Factor sobre 36-50")
+ax.legend()
+plt.show()
+
+#== md
+### ✏️ Ejercicio 1.1
+Según el GLM:
+1. Guarda en `factor_zona_E` el factor de la zona E respecto a la zona C.
+2. Calcula `frec_perfil`: la frecuencia esperada de un conductor de **26–35 años, BM 51–70, zona E** y el resto en el nivel base. Es decir: Intercept × factor(26–35) × factor(BM 51–70) × factor(zona E).
+
+Pista: `relatividades.loc["zona = E", "factor"]`
+
+#== code
+# >>> ALUMNO
+# factor_zona_E = ...
+# frec_perfil = ...
+# <<< ALUMNO
+# >>> SOLUCION
+factor_zona_E = relatividades.loc["zona = E", "factor"]
+frec_perfil = (relatividades.loc["Intercept", "factor"] * relatividades.loc["tramo_edad = 26-35", "factor"]
+               * relatividades.loc["tramo_bm = 51-70", "factor"] * factor_zona_E)
+# <<< SOLUCION
+print(f"Factor zona E: {factor_zona_E:.3f} | Frecuencia del perfil: {frec_perfil:.4f}")
+
+#== code
+_perfil = pd.DataFrame({"tramo_edad": ["26-35"], "tramo_bm": ["51-70"], "zona": ["E"], "grupo_potencia": ["6-7"],
+                        "grupo_antig": ["3-9"], "combustible": ["Diesel"]})
+comprobar(lambda: frec_perfil, float(glm_frec.predict(_perfil, offset=np.zeros(1)).iloc[0]),
+          "Multiplica el Intercept por los tres factores (todos en escala de factor, no de coeficiente)")
+
+#== md
+---
+# Bloque 2 · GLM de coste medio (Gamma) y prima pura
+
+### Tratamiento de los grandes siniestros
+Los siniestros enormes son **impredecibles** a nivel de póliza (sesión 4) y distorsionan los factores. La práctica habitual:
+1. **Limitar** cada siniestro a 100.000 € para modelizar.
+2. Repartir el exceso como una **carga por grandes siniestros** proporcional para todos.
+
+#== code
+sin = cargar_siniestros_referencia()
+sin["importe_limitado"] = sin["importe"].clip(upper=100_000)
+carga_grandes = sin["importe"].sum() / sin["importe_limitado"].sum()
+print(f"Carga por grandes siniestros: {carga_grandes:.3f} (el exceso sobre 100k supone un {carga_grandes - 1:.1%} adicional)")
+
+limitado = sin.groupby("id_poliza")["importe_limitado"].sum()
+train["coste_limitado"] = train["id_poliza"].map(limitado).fillna(0)
+
+#== md
+### GLM Gamma
+- **Respuesta:** coste medio por siniestro de cada póliza (solo pólizas con siniestro).
+- **Familia Gamma con enlace log:** importes positivos y asimétricos, modelo multiplicativo.
+- **Pesos:** número de siniestros (`var_weights`). Un coste medio de 5 siniestros es más fiable que el de uno.
+
+> ⚠️ **Trampa clásica:** en `statsmodels`, la Gamma usa por defecto el enlace *inverso*, no el log. Hay que indicar `link=sm.families.links.Log()` o los coeficientes no son factores multiplicativos.
+
+#== code
+con_sin = train[train["n_siniestros"] > 0].copy()
+con_sin["coste_medio"] = con_sin["coste_limitado"] / con_sin["n_siniestros"]
+
+glm_sev = smf.glm("coste_medio ~ C(tramo_edad, Treatment('36-50')) + C(grupo_antig, Treatment('3-9')) + C(combustible)",
+                  data=con_sin, family=sm.families.Gamma(link=sm.families.links.Log()),
+                  var_weights=con_sin["n_siniestros"]).fit()
+tabla_relatividades(glm_sev)
+
+#== md
+**Aquí está la otra mitad de la historia:** los conductores de 18–25 años no tienen más siniestros (una vez descontado el bonus-malus), pero sus siniestros son **~30 % más caros** (y significativo). Además protagonizan los siniestros enormes, que el modelo trata aparte. **Este es el sobrecoste que la tarifa actual no recoge.**
+
+### Prima pura del modelo
+
+$$\text{Prima pura} = \text{Frecuencia} \times \text{Coste medio} \times \text{Carga grandes siniestros}$$
+
+#== code
+for d in (train, test):
+    d["frec_modelo"] = glm_frec.predict(d, offset=np.zeros(len(d)))
+    d["sev_modelo"] = glm_sev.predict(d)
+    d["prima_pura_modelo"] = d["frec_modelo"] * d["sev_modelo"] * carga_grandes
+
+# Calibración: que el total del modelo cuadre con el coste real de entrenamiento
+calib = train["coste_siniestros"].sum() / (train["prima_pura_modelo"] * train["exposicion"]).sum()
+for d in (train, test):
+    d["prima_pura_modelo"] *= calib
+print(f"Factor de calibración: {calib:.3f}")
+test[["edad_conductor", "bonus_malus", "zona", "prima_anual", "prima_pura_modelo"]].head()
+
+#== md
+---
+# Bloque 3 · Segmentación con árboles de decisión
+
+Un **árbol de decisión** busca automáticamente las preguntas sí/no que mejor separan pólizas de alta y baja frecuencia. Su gran ventaja para negocio es que **el resultado son reglas legibles**, que se pueden aplicar en Excel o en el sistema de suscripción.
+
+Configuración clave:
+- `criterion="poisson"`: el criterio adecuado para frecuencias.
+- `sample_weight=exposicion` y respuesta = siniestros / exposición.
+- `max_depth=3`: como mucho 8 segmentos, fáciles de explicar.
+- `min_weight_fraction_leaf=0.03`: cada segmento con al menos el 3 % de la exposición, para que sea **creíble** (regla ±2/√N de la sesión 4).
+
+#== code
+from sklearn.tree import DecisionTreeRegressor, export_text, plot_tree
+
+variables = ["edad_conductor", "bonus_malus", "antig_vehiculo", "potencia", "densidad"]
+arbol = DecisionTreeRegressor(criterion="poisson", max_depth=3, min_weight_fraction_leaf=0.03, random_state=0)
+arbol.fit(train[variables], train["n"] / train["exposicion"], sample_weight=train["exposicion"])
+print(export_text(arbol, feature_names=variables, decimals=3))
+
+#== code
+fig, ax = plt.subplots(figsize=(16, 6))
+plot_tree(arbol, feature_names=variables, filled=True, impurity=False, proportion=True, precision=3, ax=ax, fontsize=8)
+plt.show()
+
+#== md
+### Del árbol a la cuenta de resultados por segmento
+`arbol.apply()` devuelve el segmento (hoja) de cada póliza. Con eso calculamos el **margen por segmento**: la información que necesita negocio.
+
+#== code
+df["segmento"] = arbol.apply(df[variables])
+seg = df.groupby("segmento").agg(polizas=("id_poliza", "count"), exposicion=("exposicion", "sum"),
+                                 n=("n", "sum"), primas=("prima_devengada", "sum"),
+                                 siniestros=("coste_siniestros", "sum"), margen=("margen", "sum"))
+seg["frecuencia"] = seg["n"] / seg["exposicion"]
+seg["siniestralidad"] = seg["siniestros"] / seg["primas"]
+seg["peso_primas"] = seg["primas"] / seg["primas"].sum()
+seg.sort_values("frecuencia")
+
+#== md
+### ✏️ Ejercicio 3.1
+1. Guarda en `segmento_peor` el número del segmento con **menor margen**.
+2. Calcula `perdida_peor`: su margen (en €).
+3. Mirando la salida de `export_text`, describe con palabras ese segmento (en un comentario).
+
+#== code
+# >>> ALUMNO
+# segmento_peor = ...
+# perdida_peor = ...
+# # Descripción: ...
+# <<< ALUMNO
+# >>> SOLUCION
+segmento_peor = seg["margen"].idxmin()
+perdida_peor = seg.loc[segmento_peor, "margen"]
+# Descripción: conductores con bonus-malus > 90 (malus): frecuencia ~3 veces la media
+# <<< SOLUCION
+print(f"Segmento {segmento_peor}: margen {perdida_peor:,.0f} €")
+
+#== code
+comprobar(lambda: perdida_peor, seg["margen"].min(), "seg['margen'].idxmin() da el segmento; .loc[..., 'margen'] su margen")
+
+#== md
+### Contraste: k-means (clustering no supervisado)
+k-means agrupa pólizas **parecidas entre sí**, pero sin mirar si tienen siniestros. Es útil para describir la cartera (perfiles de cliente), no para segmentar por riesgo:
+
+#== code
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+
+Z = StandardScaler().fit_transform(df[variables].assign(densidad=np.log(df["densidad"])))
+df["cluster"] = KMeans(n_clusters=5, n_init=5, random_state=0).fit_predict(Z)
+cl = df.groupby("cluster").agg(exposicion=("exposicion", "sum"), n=("n", "sum"),
+                               primas=("prima_devengada", "sum"), siniestros=("coste_siniestros", "sum"))
+cl["frecuencia"] = cl["n"] / cl["exposicion"]
+cl["siniestralidad"] = cl["siniestros"] / cl["primas"]
+print("Diferencia de frecuencia entre el mejor y el peor grupo:")
+print(f"  árbol:   {seg['frecuencia'].max() / seg['frecuencia'].min():.1f} veces")
+print(f"  k-means: {cl['frecuencia'].max() / cl['frecuencia'].min():.1f} veces")
+
+#== md
+El árbol, al estar **guiado por los siniestros**, separa mucho mejor el riesgo.
+
+---
+# Bloque 4 · Validación y simulación de impacto
+
+### 4.1 ¿Ordena bien el riesgo? Curva de lift (en test)
+Ordenamos las pólizas de test por la prima pura que predice el modelo, las agrupamos en 10 grupos de igual exposición y comparamos lo **predicho** con lo **observado**.
+
+#== code
+fig, ax = plt.subplots(figsize=(8, 4))
+lift = curva_lift(test["n"] / test["exposicion"], test["frec_modelo"],
+                  test["exposicion"], ax=ax, titulo="Lift de frecuencia (test): el modelo ordena bien")
+ax.set_ylabel("Siniestros por año-póliza")
+plt.show()
+
+#== md
+### 4.2 Gini: el modelo frente a la tarifa actual
+El **índice de Gini** mide cuánto concentra el modelo los siniestros en las pólizas que señala como más arriesgadas (0 = azar). Comparamos el modelo con la **tarifa actual**, usando su prima como predictor.
+
+#== code
+y_test = test["n"] / test["exposicion"]
+fig, ax = plt.subplots(figsize=(5.5, 5.5))
+curva_lorenz(y_test, test["frec_modelo"], test["exposicion"], ax=ax, etiqueta="GLM")
+curva_lorenz(y_test, test["prima_anual"], test["exposicion"], ax=ax, etiqueta="Tarifa actual")
+ax.set_title("Frecuencia (test)")
+plt.show()
+
+#== md
+El GLM ordena mejor que la tarifa actual, aunque la mejora es moderada: la tarifa actual ya usa los dos factores más potentes (bonus-malus y zona). **Es lo habitual en la vida real**: las mejoras de tarifa se ganan punto a punto.
+
+### 4.3 Doble lift: ¿dónde está mal cobrada la tarifa actual?
+Para cada póliza: **ratio = prima modelo / prima actual**. Si el modelo tiene razón, donde el ratio es alto (el modelo cobraría más), la siniestralidad *real* con la tarifa actual debería ser alta.
+
+#== code
+test["prima_modelo"] = test["prima_pura_modelo"] / 0.70     # mismo objetivo de siniestralidad que la tarifa actual
+test["ratio_modelo_actual"] = test["prima_modelo"] / test["prima_anual"]
+test["decil"] = pd.qcut(test["ratio_modelo_actual"], 10, labels=False) + 1
+dl = test.groupby("decil").agg(ratio_medio=("ratio_modelo_actual", "mean"), primas=("prima_devengada", "sum"),
+                              siniestros=("coste_siniestros", "sum"))
+dl["siniestralidad_tarifa_actual"] = dl["siniestros"] / dl["primas"]
+fig, ax = plt.subplots(figsize=(8, 3.8))
+ax.bar(dl.index, dl["siniestralidad_tarifa_actual"], color="#1f4e79")
+ax.axhline(test["coste_siniestros"].sum() / test["prima_devengada"].sum(), color="k", ls="--", label="Media")
+ax.set_xlabel("Decil de (prima modelo / prima actual): 1 = el modelo bajaría precio … 10 = lo subiría")
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+ax.set_title("Donde el modelo subiría el precio, la tarifa actual pierde dinero")
+ax.legend()
+plt.show()
+dl
+
+#== md
+### 4.4 Simulación: tarifa nueva **neutral en ingresos**
+Redistribuimos la **misma prima total** según el modelo, limitando los cambios a ±25 % por póliza (para no perder clientes de golpe). ¿Cómo queda la siniestralidad por segmento?
+
+> Supuesto simplificador: ningún cliente se da de baja por el cambio de precio. En la realidad hay que modelizar la **elasticidad**, que es otro proyecto.
+
+#== code
+sim = test.copy()
+cambio = sim["ratio_modelo_actual"].clip(0.75, 1.25)
+sim["prima_nueva_dev"] = sim["prima_devengada"] * cambio
+sim["prima_nueva_dev"] *= sim["prima_devengada"].sum() / sim["prima_nueva_dev"].sum()    # neutral en ingresos
+
+sim["segmento"] = arbol.apply(sim[variables])
+comp = sim.groupby("segmento").agg(primas_actual=("prima_devengada", "sum"), primas_nueva=("prima_nueva_dev", "sum"),
+                                   siniestros=("coste_siniestros", "sum"))
+comp["siniestralidad_actual"] = comp["siniestros"] / comp["primas_actual"]
+comp["siniestralidad_nueva"] = comp["siniestros"] / comp["primas_nueva"]
+comp["cambio_precio"] = comp["primas_nueva"] / comp["primas_actual"] - 1
+comp.style.format({"primas_actual": "{:,.0f}", "primas_nueva": "{:,.0f}", "siniestros": "{:,.0f}",
+                   "siniestralidad_actual": "{:.0%}", "siniestralidad_nueva": "{:.0%}", "cambio_precio": "{:+.1%}"})
+
+#== md
+### ✏️ Ejercicio 4.1
+Calcula la **dispersión de la siniestralidad entre segmentos** (desviación típica ponderada por primas) antes y después del cambio de tarifa, en `disp_actual` y `disp_nueva`. Una tarifa más justa debería **reducirla**.
+
+Pista: `np.sqrt(np.average((x - media)**2, weights=w))`, donde `media = np.average(x, weights=w)`.
+
+#== code
+# >>> ALUMNO
+# def disp_ponderada(x, w):
+#     ...
+# disp_actual = ...
+# disp_nueva = ...
+# <<< ALUMNO
+# >>> SOLUCION
+def disp_ponderada(x, w):
+    media = np.average(x, weights=w)
+    return np.sqrt(np.average((x - media) ** 2, weights=w))
+
+disp_actual = disp_ponderada(comp["siniestralidad_actual"], comp["primas_actual"])
+disp_nueva = disp_ponderada(comp["siniestralidad_nueva"], comp["primas_nueva"])
+# <<< SOLUCION
+print(f"Dispersión actual: {disp_actual:.1%} → nueva: {disp_nueva:.1%}")
+
+#== code
+def _dp(x, w):
+    m = np.average(x, weights=w)
+    return np.sqrt(np.average((x - m) ** 2, weights=w))
+comprobar(lambda: (round(disp_actual, 6), round(disp_nueva, 6)),
+          (round(_dp(comp["siniestralidad_actual"], comp["primas_actual"]), 6),
+           round(_dp(comp["siniestralidad_nueva"], comp["primas_nueva"]), 6)),
+          "Pondera cada segmento por sus primas (actuales o nuevas, respectivamente)")
+
+#== md
+---
+## Resumen de la sesión (y del curso)
+- El **análisis univariante engaña** cuando las variables están relacionadas (edad ↔ bonus-malus). El GLM separa los efectos.
+- Los **factores** `exp(β)` del GLM son una tabla multiplicativa, el mismo lenguaje que una tarifa en Excel.
+- Frecuencia (Poisson) y coste medio (Gamma, con grandes siniestros aparte) cuentan **historias distintas**: los jóvenes no tienen más siniestros a igual bonus-malus, pero sí siniestros más caros.
+- Un **árbol de decisión** da segmentos con reglas legibles y su margen asociado.
+- Valida siempre en **datos no vistos** (test): lift, Gini y **doble lift contra la tarifa actual**.
+- El objetivo de negocio no es "el mejor modelo", sino **tomar mejores decisiones de precio y de mix**.
+
+### ¿Y ahora qué?
+- Notebooks complementarios: **C1** (grandes volúmenes y SQL) y **C2** (reservas e IBNR).
+- Para profundizar: *CAS Monograph 5 – GLMs for Insurance Rating* (Goldburd et al.) y los tutoriales de [actuarialdatascience.org](https://www.actuarialdatascience.org).
+- Reto: aplica el patrón de la sesión 3 (`src/` + `scripts/` + `config/`) a un informe real que hoy hagas a mano.
