@@ -19,7 +19,7 @@ Los notebooks se ejecutan en **Google Colab** sin instalar nada, y también en l
 
 | Sesión | Notebook | Abrir |
 |---|---|---|
-| Preparación | `00_preparacion_colab_y_python` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SSerraPe/curso-python-finanzas/blob/main/notebooks/00_preparacion_colab_y_python.ipynb) |
+| S1 · inicio (guiado) · tu copia del curso | `00_preparacion_colab_y_python` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SSerraPe/curso-python-finanzas/blob/main/notebooks/00_preparacion_colab_y_python.ipynb) |
 | S1 · Python para quien viene de Excel | `01_fundamentos_python` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SSerraPe/curso-python-finanzas/blob/main/notebooks/01_fundamentos_python.ipynb) |
 | S2 · pandas, KPIs y visualización | `02_pandas_kpis_visualizacion` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SSerraPe/curso-python-finanzas/blob/main/notebooks/02_pandas_kpis_visualizacion.ipynb) |
 | S3 · Automatización del cierre mensual | `03_automatizacion_cierre_mensual` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/SSerraPe/curso-python-finanzas/blob/main/notebooks/03_automatizacion_cierre_mensual.ipynb) |
@@ -30,11 +30,22 @@ Los notebooks se ejecutan en **Google Colab** sin instalar nada, y también en l
 
 Las soluciones (ya ejecutadas, con gráficos) están en [`notebooks/soluciones/`](notebooks/soluciones/).
 
-**Cómo se trabaja cada notebook:**
-1. Abrir con el botón *Open in Colab* → **Archivo → Guardar una copia en Drive**.
-2. Ejecutar la primera celda ⚙️, que descarga el curso e instala lo necesario.
+### Cómo trabajan los alumnos: su propia copia del curso en Google Drive
+
+GitHub es la **fuente de solo lectura**. Cada alumno trabaja sobre **una copia completa del repositorio en su Google Drive** (`Mi unidad › curso-python-finanzas`), así sus notebooks, sus ejercicios y los ficheros que generan (Excel, PDF…) se conservan de una sesión a otra. No hace falta cuenta de GitHub, solo una cuenta de Google.
+
+**Primer día (al inicio de la sesión 1, todos a la vez, ~25 min):**
+1. El profesor comparte **un único enlace**: el botón *Open in Colab* del notebook `00`.
+2. El alumno ejecuta la celda **📥 Copia el curso en tu Google Drive** y autoriza el acceso a Drive. La celda clona el repositorio y lo copia en su Drive.
+3. Abre **su copia** del notebook 00 (*Archivo → Abrir cuaderno → Google Drive*) y sigue allí.
+
+**Cada sesión:**
+1. Abrir el notebook **desde Drive** (*Archivo → Abrir cuaderno → Google Drive*, o *Recientes*).
+2. Ejecutar la primera celda ⚙️: conecta Drive, se sitúa en la copia del alumno e instala lo que Colab no trae. Si no encuentra la copia, avisa y trabaja con una copia temporal clonada de GitHub.
 3. Leer, ejecutar y completar los ejercicios ✏️ (sustituyendo los `...`). La celda siguiente dice ✅ o ❌ y da una pista.
 4. Si un ejercicio se atasca, una celda 🛟 carga la solución para poder seguir.
+
+**Si corriges algo durante el curso:** haz `push` a GitHub y pide a los alumnos que ejecuten la celda **🔄 Actualizar mi copia** (sección 9 del notebook 00). Renueva datos, `src/`, scripts, documentos y soluciones, y añade notebooks nuevos **sin sobrescribir** los notebooks en los que trabaja el alumno.
 
 ---
 
@@ -69,13 +80,13 @@ curso-python-finanzas/
 ### 1. Publicar el repositorio en GitHub
 ```bash
 cd curso-python-finanzas
-python herramientas/configurar_repo.py <tu-usuario-u-organizacion>   # sustituye SSerraPe en notebooks y README
+python herramientas/configurar_repo.py <tu-usuario-u-organizacion>   # pone tu usuario en los enlaces de notebooks, README y generador
 git init && git add . && git commit -m "Curso Python FP&A Seguros"
 git branch -M main
 git remote add origin https://github.com/<tu-usuario-u-organizacion>/curso-python-finanzas.git
 git push -u origin main
 ```
-El repositorio puede ser **público** (los datos son públicos o simulados). Si es **privado**, los alumnos necesitan acceso y en Colab tendrán que autenticarse para clonar. Lo más sencillo es hacerlo público.
+El repositorio debe ser **público** (los datos son públicos o simulados): las celdas 📥, 🔄 y ⚙️ lo clonan desde Colab sin autenticación. Si fuera privado, esa copia fallaría.
 
 ### 2. Comprobar que todo funciona
 ```bash

@@ -43,9 +43,36 @@ Notas de apoyo para impartir cada sesión. Para cada bloque se indica **qué exp
 
 **Antes del curso:** ejecuta `python herramientas/verificar_notebooks.py` (en local) **y** abre y ejecuta cada notebook en Colab la semana anterior.
 
+### La copia del curso en el Drive de cada alumno
+
+GitHub es la fuente de **solo lectura**. El primer día (P0, al inicio de S1) cada alumno **copia el repositorio entero en su Google Drive** (`Mi unidad › curso-python-finanzas`) y a partir de ahí abre siempre los notebooks desde su Drive. Así se resuelven tres problemas a la vez: el trabajo del alumno no se pierde, los notebooks tienen al lado sus datos y su `src/`, y lo que generan (el Excel y el PDF de S3) queda guardado.
+
+| Celda | Dónde | Qué hace |
+|---|---|---|
+| 📥 Copia el curso | notebook 00, sección 2 | Monta Drive, clona el repositorio en `/content` (`--depth 1`) y copia **todo menos `.git`** a `MyDrive/curso-python-finanzas`. Si la carpeta ya existe, **no toca nada** |
+| ⚙️ Prepara el entorno | primera celda de 01–05, C1 y C2 | Monta Drive y se sitúa en la copia del alumno. Si no la encuentra, avisa y clona una copia **temporal** en `/content` para no bloquear la clase. Instala `requirements-colab.txt` |
+| 🔄 Actualizar mi copia | notebook 00, sección 9 | Descarga la última versión y sobrescribe `config/`, `data/`, `docs/`, `herramientas/`, `scripts/`, `src/`, `notebooks/soluciones/` y los requirements. Añade los notebooks que falten. **Nunca sobrescribe un notebook de alumno que ya exista** |
+
+- **Por qué no se usa Git dentro de Drive:** Git sobre el disco montado de Drive es lento y a veces deja el repositorio a medias. Clonar en `/content` y copiar es más robusto, y la actualización no necesita `.git`.
+- **Por qué no un *fork* en GitHub:** obliga a que cada alumno tenga cuenta de GitHub y no resuelve dónde se guarda su trabajo en Colab. El *fork* y el *pull request* se explican en S3 (Git en 15 min), cuando ya tiene sentido.
+- **Si corriges algo a mitad de curso:** `git push` y pide que ejecuten la celda 🔄. Si el cambio es en un notebook de alumno, la celda 🔄 no lo pisa. Diles que abran la versión nueva desde GitHub (*Open in Colab*) o que borren su notebook antes de pulsar 🔄.
+- La ruta `MyDrive` es la misma aunque Drive esté en español (*Mi unidad*).
+
 ---
 
 ## S1. Fundamentos de Python
+
+### P0 guiado (minutos 5–30) · La copia del curso
+- **Proyecta tu pantalla con una cuenta "de alumno"** (no la tuya de profesor), para que lo que ven coincida con lo que tú ves.
+- Pega en el chat el enlace *Open in Colab* del 00 y avanzad **paso a paso, esperando a todos**: post-it verde cuando la celda 📥 diga ✅.
+- **Ventanas que van a salir** (avísalas antes): *"Este notebook no es de Google"* → *Ejecutar de todos modos*; *"¿Permitir acceso a Google Drive?"* → *Conectar* → elegir cuenta → *Permitir*. Si alguien desmarca permisos en la pantalla de Google, el montaje falla: repetir y aceptarlos todos.
+- **Comprobación clave:** cuando todos hayan abierto su copia, pregunta *"¿alguien ve el botón «Copiar en Drive» arriba?"*. Quien lo vea sigue en la versión de GitHub y sus cambios se perderán.
+- **Problemas típicos:**
+  - *"Abrir con" no muestra Colab* en drive.google.com → usar *Archivo → Abrir cuaderno → Google Drive* desde Colab (siempre funciona).
+  - *Cuenta corporativa que bloquea Drive en Colab* → que use una cuenta personal de Google (los datos son públicos o simulados) o el plan B en local.
+  - *Ha ejecutado la 📥 dos veces* → no pasa nada, la segunda no toca la copia.
+  - *Ha movido o renombrado la carpeta* → devolverla a *Mi unidad* con el nombre `curso-python-finanzas`. Si la ha estropeado: renombrarla (p. ej. `…_viejo`) y volver a ejecutar la 📥.
+- **Mensaje:** *"GitHub es el original del profesor; vuestra carpeta de Drive es vuestro cuaderno. En S3 veremos que esto mismo, con control de versiones, es Git."*
 
 ### Bloque 1 · Tipos y operaciones
 - **Tipado dinámico**: el tipo lo lleva el valor, no la variable. `type()` para inspeccionar.
@@ -351,6 +378,9 @@ Es el ejemplo de manual de **variables de confusión**: el análisis variable a 
 - **"¿Por qué no lo hago en Excel/Power Query?"** Power Query es estupendo para transformar datos. Python añade estadística, modelos, automatización completa (PDF, correos, programación), control de versiones y escala. Además, conviven: Python genera el Excel final.
 - **"¿Puedo usar esto con los datos de la empresa?"** En Colab, **no**. En local (Anaconda/VS Code), con las herramientas aprobadas por IT, sí.
 - **"Me sale `ModuleNotFoundError: curso_seguros`."** No se ha ejecutado la celda ⚙️ de preparación (o se reinició la sesión). Hay que ejecutarla de nuevo.
+- **"La celda ⚙️ dice que no encuentra mi copia y usa una temporal."** O no se ha hecho la copia (celda 📥 del notebook 00), o la carpeta no está en *Mi unidad* con el nombre `curso-python-finanzas`, o no se aceptó el permiso de Drive. Mientras tanto se puede seguir la clase, pero lo que se genere se perderá al cerrar.
+- **"He perdido lo que hice en el ejercicio."** Seguramente trabajaba en la versión de GitHub (se ve el botón *Copiar en Drive*). A partir de ahora, abrir siempre desde Drive.
+- **"¿Tengo que volver a copiar el curso cada sesión?"** No. La copia se hace una vez. Cada sesión basta con abrir el notebook desde Drive y ejecutar la ⚙️.
 - **"Me sale `FileNotFoundError`."** Lo mismo: la carpeta de trabajo no es la raíz del curso.
 - **"¿Por qué mi resultado no coincide exactamente con la solución?"** Las celdas de comprobación toleran pequeñas diferencias de decimales; si sale ❌, la pista indica el error conceptual más probable (normalmente, media de ratios frente a cociente de sumas).
 - **"¿Cuándo uso pandas, DuckDB o Polars?"** pandas por defecto. DuckDB si se piensa en SQL o los datos no caben en memoria. Polars si se quiere máxima velocidad con sintaxis de DataFrame.

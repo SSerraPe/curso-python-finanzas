@@ -1,9 +1,9 @@
 # Documento 1 · Temario rediseñado
 
 **Curso:** Python aplicado a Finanzas (FP&A) en una aseguradora
-**Formato:** 5 sesiones × 2 h + preparación previa autónoma + 2 módulos complementarios autónomos
+**Formato:** 5 sesiones × 2 h (la primera empieza con la preparación del entorno, guiada en clase) + 2 módulos complementarios autónomos
 **Público:** equipo de administración y planeación financiera (FP&A). Dominan Excel y no han programado en Python
-**Entorno:** Google Colab, con notebooks que se abren desde GitHub y no requieren instalación
+**Entorno:** Google Colab. Cada alumno copia el repositorio de GitHub en su Google Drive el primer día y trabaja siempre sobre esa copia. No requiere instalación ni cuenta de GitHub
 
 ---
 
@@ -50,12 +50,20 @@ Datos (todos en `data/`, descritos en el documento 3):
 
 ## 4. Sesiones
 
-### P0 · Preparación previa (autónoma, 45–60 min) — `00_preparacion_colab_y_python.ipynb`
+### P0 · Tu copia del curso (al inicio de S1, guiada, 25 min) — `00_preparacion_colab_y_python.ipynb`
 
-- Abrir un notebook desde GitHub en Colab y guardar una copia en el Drive propio.
-- Ejecutar celdas, reiniciar y ejecutar todo, y saber qué hacer cuando sale un error.
-- Python mínimo: variables, números, texto, `print` y f-strings.
-- **Resultado:** el día 1 nadie pierde 20 minutos configurando.
+Es el primer contacto con los alumnos, así que se hace **en clase y todos a la vez**, con el profesor proyectando su pantalla. No se envía como tarea previa.
+
+| Min (dentro de S1) | Paso | Qué hace el alumno |
+|---|---|---|
+| 5–10 | Abrir el 00 desde GitHub | Pulsa el enlace *Open in Colab* que comparte el profesor (correo o chat de Teams) |
+| 10–15 | **Copiar el repositorio en su Drive** | Ejecuta la celda 📥 → *Ejecutar de todos modos* → *Conectar a Google Drive* → *Permitir*. Se crea `Mi unidad › curso-python-finanzas` con notebooks, datos y `src/` |
+| 15–20 | Abrir su copia | *Archivo → Abrir cuaderno → Google Drive* → `00_preparacion`. Cierra la pestaña de GitHub. **Comprobación en voz alta:** nadie debe ver ya el botón *Copiar en Drive* |
+| 20–30 | Colab y errores | Ejecutar, reiniciar y *Ejecutar todas*; leer un `NameError` (secciones 3 y 7 del 00) |
+
+- Las secciones 4–6 y 8 del 00 (calculadora, variables, f-strings y ejercicio de margen) se hacen como calentamiento si sobra tiempo. Si no, quedan como repaso para casa: el bloque 1 de S1 repite esos conceptos.
+- **Por qué una copia del repositorio y no "Guardar una copia en Drive" de cada notebook:** con la copia completa, los notebooks tienen al lado sus datos y funciones, y lo que generan (el Excel y el PDF del cierre en S3) queda guardado en el Drive del alumno. Además, el alumno practica desde el primer día la idea de *repositorio* que se formaliza en S3 (Git en 15 min).
+- **Resultado:** al acabar, cada alumno tiene su carpeta del curso en Drive y sabe abrir cualquier notebook desde ahí.
 
 ### S1 · Python para quien viene de Excel — `01_fundamentos_python.ipynb`
 
@@ -63,12 +71,13 @@ Datos (todos en `data/`, descritos en el documento 3):
 
 | Min | Bloque | Contenido |
 |---|---|---|
-| 0–10 | Arranque | Presentación del caso; demo de 2 min del informe final para mostrar adónde vamos; normas del notebook |
-| 10–35 | Tipos y operaciones | `int`, `float`, `str`, `bool`; cuenta de resultados de una póliza (prima − siniestros − comisión); f-strings con formato de miles y %; por qué `0.1 + 0.2 != 0.3` y `round`/`math.isclose` |
-| 35–55 | Colecciones y control de flujo | Listas y diccionarios como "filas" de una cartera mini; `for`, `if/elif/else` para clasificar pólizas rentables y no rentables; acumuladores |
-| 55–65 | *Pausa* | |
-| 65–90 | Funciones y módulos | `def margen_tecnico(...)`, valores por defecto y docstrings; `import math`, `datetime`; importar nuestras funciones de `src/`; buenas prácticas (nombres claros, no repetir código, una función hace una cosa) |
-| 90–115 | Primer contacto con pandas | Leer el presupuesto en Excel (`header=2`); seleccionar, filtrar y sumar; chuleta Excel → pandas |
+| 0–5 | Arranque | Presentación del caso; demo de 2 min del informe final para mostrar adónde vamos |
+| 5–30 | **P0 guiado** | Copia del repositorio en el Drive de cada alumno, abrir desde Drive, ejecutar y leer errores (ver P0) |
+| 30–50 | Tipos y operaciones | Se abre `01` **desde Drive** y se ejecuta la ⚙️. `int`, `float`, `str`, `bool`; cuenta de resultados de una póliza (prima − siniestros − comisión); f-strings con formato de miles y %; por qué `0.1 + 0.2 != 0.3` y `round`/`math.isclose` |
+| 50–70 | Colecciones y control de flujo | Listas y diccionarios como "filas" de una cartera mini; `for`, `if/elif/else` para clasificar pólizas rentables y no rentables; acumuladores |
+| 70–80 | *Pausa* | |
+| 80–100 | Funciones y módulos | `def margen_tecnico(...)`, valores por defecto y docstrings; `import math`, `datetime`; importar nuestras funciones de `src/`; buenas prácticas (nombres claros, no repetir código, una función hace una cosa) |
+| 100–115 | Primer contacto con pandas | Leer el presupuesto en Excel (`header=2`); seleccionar, filtrar y sumar; chuleta Excel → pandas. El ejercicio de siniestralidad por canal puede terminarse en casa |
 | 115–120 | Cierre | Ticket de salida: una cosa aprendida y una duda |
 
 **Entregable:** función `cuenta_resultados(poliza)` probada sobre la cartera mini + total presupuestado por canal.
@@ -163,8 +172,10 @@ Datos (todos en `data/`, descritos en el documento 3):
 
 ## 6. Checklist logístico (antes de la sesión 1)
 
-- [ ] Confirmar con IT que `colab.research.google.com`, `github.com` y `pypi.org` son accesibles desde la red corporativa y que hay cuenta de Google utilizable. **Plan B:** Anaconda o VS Code en local con `requirements.txt`.
-- [ ] Publicar el repositorio en GitHub (público, o privado con acceso de los alumnos) y sustituir `REPO_URL` en la celda de arranque de cada notebook (ver README).
+- [ ] Confirmar con IT que `colab.research.google.com`, `github.com`, `pypi.org` y **Google Drive** son accesibles desde la red corporativa y que cada alumno tiene una cuenta de Google utilizable. Si son cuentas de Google Workspace de la empresa, comprobar que el administrador permite **montar Drive desde Colab** (es lo que hace la celda 📥). **Plan B:** Anaconda o VS Code en local con `requirements.txt`.
+- [ ] Publicar el repositorio en GitHub como **público** (ver README).
+- [ ] Hacer el recorrido del P0 con una **cuenta de Google de prueba sin Colab usado nunca** (como la de un alumno): copia en Drive, abrir desde Drive y ejecutar la ⚙️ del 01.
 - [ ] Ejecutar todos los notebooks en Colab la semana anterior (Colab cambia versiones de librerías sin avisar).
-- [ ] Enviar P0 una semana antes y pedir que lo completen.
+- [ ] Unos días antes, enviar un correo breve: *traed portátil y cuenta de Google con sesión iniciada en Chrome; el primer día montamos el entorno juntos*. No se pide ninguna tarea previa.
+- [ ] El día 1, tener a mano el enlace *Open in Colab* del 00 para pegarlo en el chat.
 - [ ] Recordar que en Colab **solo se usan datos públicos o simulados**, nunca datos reales de la compañía.

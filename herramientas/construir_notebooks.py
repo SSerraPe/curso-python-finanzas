@@ -8,6 +8,7 @@ Formato de las fuentes
 #== code               -> empieza una celda de código
 #== setup              -> inserta la celda estándar de preparación del entorno
 #== setup:chainladder  -> idem, instalando además chainladder (reinicia Colab)
+{{REPO_URL}}          -> se sustituye por REPO_URL (en celdas md y de código)
 
 Dentro de una celda de código:
 # >>> ALUMNO           (líneas comentadas con '# ' que verá el alumno)
@@ -34,13 +35,24 @@ SETUP = '''# @title ⚙️ Ejecuta esta celda primero (prepara el entorno) { dis
 import os, sys, subprocess
 from pathlib import Path
 
-REPO_URL = "{repo}"  # ← el profesor lo cambia por la URL real del repositorio
+REPO_URL = "{repo}"
+COPIA_DRIVE = Path("/content/drive/MyDrive/curso-python-finanzas")  # la crea el notebook 00
 EN_COLAB = "google.colab" in sys.modules
 
 if EN_COLAB:
-    if not Path("/content/curso-python-finanzas").exists():
-        subprocess.run(["git", "clone", "-q", "--depth", "1", REPO_URL, "/content/curso-python-finanzas"], check=True)
-    os.chdir("/content/curso-python-finanzas")
+    from google.colab import drive
+    try:
+        drive.mount("/content/drive")
+    except Exception as e:
+        print("⚠️ No se ha podido conectar Google Drive:", e)
+    if COPIA_DRIVE.is_dir():
+        os.chdir(COPIA_DRIVE)
+    else:
+        print("⚠️ No encuentro tu copia del curso en Mi unidad › curso-python-finanzas (ver notebook 00).")
+        print("   Uso una copia TEMPORAL: lo que generes se pierde al cerrar Colab.")
+        if not Path("/content/curso-python-finanzas").exists():
+            subprocess.run(["git", "clone", "-q", "--depth", "1", REPO_URL, "/content/curso-python-finanzas"], check=True)
+        os.chdir("/content/curso-python-finanzas")
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-colab.txt"], check=True){extra}
 else:
     # En tu ordenador: nos situamos en la carpeta raíz del curso (la que tiene data/ y src/)
@@ -104,6 +116,7 @@ def construir(fuente: Path) -> None:
                        "colab": {"provenance": [], "toc_visible": True}}
         for tipo, contenido in celdas:
             if tipo == "md":
+                contenido = contenido.replace("{{REPO_URL}}", REPO_URL)
                 if not alumno:
                     contenido = contenido.replace("{{SOLUCIONES}}", "> 🔑 **Versión con soluciones.**")
                 else:
@@ -114,7 +127,7 @@ def construir(fuente: Path) -> None:
                 nb.cells.append(nbf.v4.new_code_cell(SETUP.replace("{repo}", REPO_URL).replace("{extra}", extra)))
             else:
                 es_ejercicio = "# >>> SOLUCION" in contenido
-                cel = nbf.v4.new_code_cell(version(contenido, alumno))
+                cel = nbf.v4.new_code_cell(version(contenido.replace("{{REPO_URL}}", REPO_URL), alumno))
                 if es_ejercicio:
                     cel.metadata["tags"] = ["ejercicio"]
                 nb.cells.append(cel)
