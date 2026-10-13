@@ -53,14 +53,14 @@ for f in sorted((OUTPUT / "2025-09").rglob("*.*")):
     print(f.relative_to(OUTPUT))
 
 #== md
-> En Colab puedes descargar cualquier fichero desde el panel 📁 de la izquierda (clic derecho → Descargar). Abre el Excel y el PDF para ver qué vamos a construir.
+> Los ficheros están en la carpeta `output/2025-09/` del curso. En el explorador de VS Code: clic derecho → **Reveal in File Explorer** (Windows) o **Reveal in Finder** (Mac) para abrirlos con Excel y con tu lector de PDF. Ábrelos para ver qué vamos a construir.
 
 Ahora lo construimos **pieza a pieza**.
 
 ---
 # Bloque 1 · Manipulación de ficheros
 
-### `pathlib`: rutas que funcionan en Windows, Mac y Colab
+### `pathlib`: rutas que funcionan en Windows, Mac y Linux
 
 #== code
 carpeta = DATA / "entrada" / "bordereaux"          # el operador / une rutas
@@ -515,7 +515,7 @@ for canal, email in DESTINATARIOS.items():
     print("✉️ ", guardar_eml(msg, carpeta, f"correo_{canal}").name)
 
 #== md
-> **¿Y el envío real?** Desde Colab no se envía correo corporativo (Google bloquea el puerto SMTP 25 y, además, Office 365 está retirando el envío SMTP con usuario y contraseña). En la empresa se hace con **Microsoft Graph** u **Outlook** (`win32com` en Windows), configurado con IT. La lógica de construir el mensaje es la misma; solo cambia la última línea.
+> **¿Y el envío real?** En el curso solo guardamos los `.eml` (puedes abrirlos con Outlook desde `output/`). El envío automático de correo corporativo no se hace por SMTP con usuario y contraseña: Office 365 lo está retirando y la red de la empresa suele bloquearlo. En la empresa se hace con **Microsoft Graph** u **Outlook** (`win32com` en Windows), configurado con IT. La lógica de construir el mensaje es la misma; solo cambia la última línea.
 
 ---
 # Bloque 5 · Del notebook al proceso

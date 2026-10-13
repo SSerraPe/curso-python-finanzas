@@ -1,0 +1,260 @@
+#== md
+# 00 · Tu entorno en VS Code y tus primeras líneas de Python
+
+**Tiempo:** 25–30 minutos · **Cuándo:** al empezar la sesión 1, todos a la vez y guiados por el profesor
+
+{{SOLUCIONES}}
+
+Este notebook es lo primero que hacemos juntos. Antes de abrirlo ya deberías haber seguido la guía de instalación del `README.md` (Python, VS Code, la carpeta del curso y el entorno `.venv`). Al terminarlo:
+
+1. Habrás comprobado que tu entorno funciona (Python, librerías y datos del curso).
+2. Sabrás abrir los notebooks en VS Code, ejecutarlos y reiniciarlos.
+3. Sabrás qué hacer cuando aparece un error (spoiler: es normal y no se rompe nada).
+4. Habrás escrito tus primeras variables y f-strings en Python.
+
+---
+## 1. ¿Qué es esto?
+
+Un **notebook** es un documento que mezcla **texto** (como este) y **celdas de código** que puedes ejecutar. Es como una hoja de Excel en la que, en lugar de fórmulas escondidas en las celdas, el cálculo está escrito y se lee de arriba abajo.
+
+**VS Code** es el programa con el que abrimos y ejecutamos los notebooks en tu ordenador. Python corre en tu máquina, dentro del entorno **`.venv`** del curso, que tiene instaladas las librerías que vamos a usar.
+
+**La carpeta `curso-python-finanzas`** es tu copia del curso: notebooks, datos (`data/`), funciones (`src/`) y lo que generes (`output/`). **GitHub** es el original del profesor, de solo lectura. Tu carpeta es tu cuaderno: lo que cambies se queda en tu ordenador.
+
+---
+## 2. Comprueba tu entorno
+
+### Paso 1 · ¿Está bien elegido el kernel?
+Arriba a la derecha del notebook verás el **kernel** (el Python que ejecuta las celdas). Debe poner **`.venv`**. Si no:
+
+1. Haz clic en él (o en **Select Kernel**).
+2. Elige **Python Environments…** → **`.venv`** (la que está dentro de `curso-python-finanzas`).
+
+### Paso 2 · Ejecuta la celda de abajo
+Haz clic en la celda 🩺 y pulsa **Shift + Enter** (o el botón ▶️ de su izquierda). Debe salir todo en ✅.
+
+#== code
+# 🩺 Comprobación del entorno
+import sys
+from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
+
+print(f"Python {sys.version.split()[0]}  →  {sys.executable}")
+print("✅ Versión de Python correcta" if sys.version_info >= (3, 10)
+      else "❌ Python demasiado antiguo: instala Python 3.12 (ver README)")
+
+raiz = next((p for p in [Path.cwd(), *Path.cwd().parents] if (p / "data").is_dir() and (p / "src").is_dir()), None)
+print(f"✅ Carpeta del curso: {raiz}" if raiz
+      else "❌ No encuentro la carpeta del curso. File → Open Folder… → curso-python-finanzas")
+if raiz and ".venv" in Path(sys.prefix).parts:
+    print("✅ Kernel: entorno .venv")
+else:
+    print("⚠️ El kernel no parece el .venv del curso (Select Kernel → Python Environments → .venv)")
+
+paquetes = ["pandas", "numpy", "matplotlib", "openpyxl", "XlsxWriter", "fpdf2", "pandera",
+            "statsmodels", "scikit-learn", "duckdb", "PyYAML", "ipykernel"]
+faltan = []
+for paquete in paquetes:
+    try:
+        print(f"✅ {paquete:<13} {version(paquete)}")
+    except PackageNotFoundError:
+        print(f"❌ {paquete:<13} no instalado")
+        faltan.append(paquete)
+if faltan:
+    print("\n💡 En la terminal de VS Code (con el .venv activo):  pip install -r requirements.txt")
+
+#== md
+Si algo sale en ❌, levanta la mano: lo resolvemos ahora y no más tarde.
+
+### Así será cada sesión a partir de ahora
+1. Abre VS Code. Si no se abre solo en el curso: **File → Open Folder…** → `curso-python-finanzas`.
+2. En el explorador de la izquierda, abre `notebooks/` y el notebook de la sesión.
+3. Comprueba que el kernel es **`.venv`** y ejecuta la primera celda **⚙️**.
+4. Trabaja. **Guarda con Ctrl + S** (Cmd + S en Mac): VS Code no guarda solo, salvo que actives *File → Auto Save*.
+
+> ⚠️ No muevas ni renombres las carpetas internas del curso (`data/`, `src/`, `notebooks/`): los notebooks las buscan ahí.
+
+---
+## 3. Ejecutar celdas
+
+Haz clic en la celda de código de abajo y pulsa **Shift + Enter**.
+
+#== code
+print("¡Hola, equipo de FP&A!")
+
+#== md
+Si ves el mensaje debajo de la celda, ya has ejecutado tu primer código en Python. 🎉
+
+**Atajos que vas a usar mucho:**
+
+| Acción | Atajo |
+|---|---|
+| Ejecutar celda y pasar a la siguiente | `Shift + Enter` |
+| Ejecutar celda y quedarte en ella | `Ctrl + Enter` (Mac: `Cmd + Enter`) |
+| Ejecutar todo el notebook | Botón **Run All** de la barra superior del notebook |
+| Empezar de cero (borra la memoria) | Botón **Restart** de la barra superior del notebook |
+| Insertar celda encima / debajo | `Esc` y luego `A` / `B` |
+| Guardar | `Ctrl + S` (Mac: `Cmd + S`) |
+
+> 💡 **Regla de oro de los notebooks:** las celdas se ejecutan en el orden en que **tú** las ejecutas, no en el orden en que aparecen. Si algo se comporta raro, *Restart* y *Run All*.
+
+---
+## 4. Python como calculadora
+
+Python entiende operaciones como Excel: `+ - * /`. La potencia es `**` (en Excel `^`).
+
+#== code
+1250 * 1.21        # precio con IVA
+
+#== code
+(100 - 72) / 100   # margen en tanto por uno
+
+#== code
+1.05 ** 3          # crecimiento compuesto 3 años al 5%
+
+#== md
+Lo que va detrás de `#` es un **comentario**: Python lo ignora. Úsalo para explicar *por qué* haces algo.
+
+---
+## 5. Variables: ponerle nombre a las cosas
+
+En Excel, el dato vive en la celda `B7` y hay que recordar qué era `B7`. En Python le damos un **nombre**:
+
+#== code
+prima = 480.0          # ingresos por la póliza (€)
+coste_siniestros = 350.0
+comision = prima * 0.15
+
+margen = prima - coste_siniestros - comision
+margen
+
+#== md
+Si ahora cambias `prima` y vuelves a ejecutar las celdas, el margen se recalcula. Es lo mismo que cambiar un input en Excel.
+
+**Reglas para los nombres:** minúsculas, palabras separadas por `_`, sin tildes ni espacios, y que expliquen lo que contienen: `prima_devengada` es mejor que `x` o `pd2`.
+
+---
+## 6. Texto y f-strings
+
+El texto (*string*) va entre comillas. Para mezclar texto y números se usan las **f-strings**: una `f` delante y las variables entre `{}`.
+
+#== code
+canal = "Agentes"
+print(f"El canal {canal} tiene un margen de {margen} €")
+print(f"Con formato de miles y 2 decimales: {margen:,.2f} €")
+print(f"Como porcentaje: {margen / prima:.1%}")
+
+#== md
+---
+## 7. Los errores son tus amigos
+
+Ejecuta la celda de abajo. Va a dar un **error** a propósito.
+
+#== code
+# Este error es intencionado: 'primas' (con s) no existe, la variable se llama 'prima'
+try:
+    print(primas)
+except NameError as e:
+    print("NameError:", e)
+
+#== md
+En la vida real verás un recuadro rojo con el texto `NameError: name 'primas' is not defined`. Cómo leerlo:
+
+1. **La última línea es la importante**: dice el *tipo* de error y el motivo.
+2. Encima se indica la línea donde ha fallado.
+3. Los errores más típicos al empezar son `NameError` (nombre mal escrito), `SyntaxError` (falta un paréntesis o unas comillas), `TypeError` (sumar texto con números) e `IndentationError` (espacios al principio de la línea).
+
+> 💡 Copiar el mensaje de error en Google (o preguntarle a un asistente de IA) suele dar la solución en segundos.
+
+---
+## 8. Tu turno ✏️
+
+Una póliza tiene una prima de **620 €**, ha tenido siniestros por **410 €**, la comisión del canal es del **18 %** y los gastos de gestión asignados son **35 €**.
+
+Calcula el `margen_poliza` y el `ratio_combinado` = (siniestros + comisión + gastos) / prima.
+
+Sustituye los `...` por tu código y ejecuta. La celda siguiente te dirá si está bien.
+
+#== code
+prima_ej = 620
+siniestros_ej = 410
+tasa_comision_ej = 0.18
+gastos_ej = 35
+
+# >>> ALUMNO
+# margen_poliza = ...
+# ratio_combinado = ...
+# <<< ALUMNO
+# >>> SOLUCION
+comision_ej = prima_ej * tasa_comision_ej
+margen_poliza = prima_ej - siniestros_ej - comision_ej - gastos_ej
+ratio_combinado = (siniestros_ej + comision_ej + gastos_ej) / prima_ej
+# <<< SOLUCION
+print(margen_poliza, ratio_combinado)
+
+#== code
+# Comprobación automática (no hace falta que entiendas este código todavía)
+import math
+if margen_poliza is ... or ratio_combinado is ...:
+    print("⏳ Completa el ejercicio de arriba")
+elif math.isclose(margen_poliza, 63.4) and math.isclose(ratio_combinado, 0.8977, rel_tol=1e-3):
+    print("✅ ¡Correcto! Margen 63,40 € y ratio combinado 89,8 %")
+else:
+    print("❌ Todavía no. 💡 La comisión es prima × tasa. El ratio combinado suma TODOS los costes.")
+
+#== md
+---
+## 9. 🔄 Solo si el profesor anuncia una actualización del curso
+
+Si corregimos algo durante el curso, hay que traer la última versión **sin tocar tus notebooks**. No hace falta hacerlo ahora.
+
+**Si descargaste el curso con Git** (`git clone`): en la terminal de VS Code (*Terminal → New Terminal*), ejecuta `git pull`. Si Git protesta porque has cambiado notebooks, avisa al profesor.
+
+**Si lo descargaste como ZIP:**
+1. Descarga otra vez el ZIP desde GitHub (*Code → Download ZIP*) y descomprímelo (por ejemplo, en *Descargas*).
+2. Escribe abajo la ruta de la carpeta descomprimida y ejecuta la celda. Copia en tu curso los datos, `src/`, scripts, documentos y soluciones, y añade los notebooks nuevos que no tengas. **Tus notebooks no se tocan.**
+
+#== code
+# 🔄 Actualizar mi copia del curso desde un ZIP descomprimido
+import shutil
+from pathlib import Path
+
+CARPETA_NUEVA = Path("~/Downloads/curso-python-finanzas-main").expanduser()   # ← cambia la ruta si hace falta
+SE_ACTUALIZAN = ["config", "data", "docs", "herramientas", "scripts", "src", "notebooks/soluciones", ".vscode",
+                 "README.md", "requirements.txt", "requirements-colab.txt"]
+
+mi_curso = next((p for p in [Path.cwd(), *Path.cwd().parents] if (p / "data").is_dir() and (p / "src").is_dir()), None)
+if not (CARPETA_NUEVA / "notebooks").is_dir():
+    print(f"ℹ️ No encuentro la versión nueva en {CARPETA_NUEVA}. Si no hay actualización, no hace falta ejecutar esta celda.")
+elif mi_curso is None or CARPETA_NUEVA.resolve() == mi_curso.resolve():
+    print("❌ La ruta debe ser la carpeta NUEVA descomprimida, no la de tu curso.")
+else:
+    for ruta in SE_ACTUALIZAN:
+        origen, destino = CARPETA_NUEVA / ruta, mi_curso / ruta
+        if origen.is_dir():
+            shutil.copytree(origen, destino, dirs_exist_ok=True)
+        elif origen.exists():
+            shutil.copy2(origen, destino)
+    nuevos = [nb.name for nb in (CARPETA_NUEVA / "notebooks").glob("*.ipynb")
+              if not (mi_curso / "notebooks" / nb.name).exists()]
+    for nombre in nuevos:
+        shutil.copy2(CARPETA_NUEVA / "notebooks" / nombre, mi_curso / "notebooks" / nombre)
+    print("✅ Copia actualizada. Tus notebooks no se han tocado.")
+    print("   Notebooks nuevos:", ", ".join(nuevos) if nuevos else "ninguno")
+    print("   Si ha cambiado requirements.txt, en la terminal:  pip install -r requirements.txt")
+
+#== md
+---
+## 10. Comprobación final
+
+Si has llegado hasta aquí, ya puedes seguir con la sesión 1. Comprueba:
+
+- [ ] Tengo la carpeta **curso-python-finanzas** abierta en VS Code (*File → Open Folder…*).
+- [ ] El kernel del notebook es **`.venv`** y la celda 🩺 sale toda en ✅.
+- [ ] Sé ejecutar celdas, reiniciar el kernel y guardar con Ctrl + S.
+- [ ] Entiendo qué es una variable y una f-string.
+- [ ] He visto un error y sé leer su última línea.
+
+**Siguiente paso:** abre `notebooks/01_fundamentos_python.ipynb` y ejecuta su celda ⚙️.
+
+**Opcional, si te pica la curiosidad:** la página [*Comparison with spreadsheets*](https://pandas.pydata.org/docs/getting_started/comparison/comparison_with_spreadsheets.html) de pandas muestra cómo se hace en Python lo que ya haces en Excel.

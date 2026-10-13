@@ -12,7 +12,7 @@
 | 3 | Funciones, módulos y buenas prácticas | 20 |
 | 4 | Primer contacto con pandas: el presupuesto | 15 |
 
-**Cómo usar este notebook:** ábrelo **desde tu copia en Google Drive** (la que creaste con el notebook 00) y ejecuta primero la celda ⚙️. Después lee, ejecuta (Shift+Enter) y, en los ejercicios ✏️, sustituye los `...` por tu código. La celda de comprobación te dirá ✅ o ❌ con una pista. Los ejercicios ⭐ son opcionales.
+**Cómo usar este notebook:** ábrelo en VS Code desde la carpeta del curso (con el kernel **`.venv`**, como en el notebook 00) y ejecuta primero la celda ⚙️. Después lee, ejecuta (Shift+Enter) y, en los ejercicios ✏️, sustituye los `...` por tu código. La celda de comprobación te dirá ✅ o ❌ con una pista. Los ejercicios ⭐ son opcionales.
 
 #== setup
 

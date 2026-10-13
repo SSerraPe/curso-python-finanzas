@@ -3,7 +3,7 @@
 **Curso:** Python aplicado a Finanzas (FP&A) en una aseguradora
 **Formato:** 5 sesiones × 2 h (la primera empieza con la preparación del entorno, guiada en clase) + 2 módulos complementarios autónomos
 **Público:** equipo de administración y planeación financiera (FP&A). Dominan Excel y no han programado en Python
-**Entorno:** Google Colab. Cada alumno copia el repositorio de GitHub en su Google Drive el primer día y trabaja siempre sobre esa copia. No requiere instalación ni cuenta de GitHub
+**Entorno:** VS Code en local. Cada alumno instala Python 3.12 y VS Code, descarga la carpeta del curso desde GitHub (ZIP o `git clone`) y trabaja siempre sobre esa carpeta con un entorno `.venv`. No requiere cuenta de GitHub. Google Colab queda como plan B
 
 ---
 
@@ -50,20 +50,20 @@ Datos (todos en `data/`, descritos en el documento 3):
 
 ## 4. Sesiones
 
-### P0 · Tu copia del curso (al inicio de S1, guiada, 25 min) — `00_preparacion_colab_y_python.ipynb`
+### P0 · Tu entorno en VS Code (al inicio de S1, guiada, 25 min) — `00_preparacion_vscode_y_python.ipynb`
 
-Es el primer contacto con los alumnos, así que se hace **en clase y todos a la vez**, con el profesor proyectando su pantalla. No se envía como tarea previa.
+La instalación (Python, VS Code, carpeta del curso y `.venv`) se pide **por correo unos días antes**, con la guía del README. En clase, todos a la vez y con el profesor proyectando su pantalla, se **comprueba** y se rescata a quien no lo tenga.
 
 | Min (dentro de S1) | Paso | Qué hace el alumno |
 |---|---|---|
-| 5–10 | Abrir el 00 desde GitHub | Pulsa el enlace *Open in Colab* que comparte el profesor (correo o chat de Teams) |
-| 10–15 | **Copiar el repositorio en su Drive** | Ejecuta la celda 📥 → *Ejecutar de todos modos* → *Conectar a Google Drive* → *Permitir*. Se crea `Mi unidad › curso-python-finanzas` con notebooks, datos y `src/` |
-| 15–20 | Abrir su copia | *Archivo → Abrir cuaderno → Google Drive* → `00_preparacion`. Cierra la pestaña de GitHub. **Comprobación en voz alta:** nadie debe ver ya el botón *Copiar en Drive* |
-| 20–30 | Colab y errores | Ejecutar, reiniciar y *Ejecutar todas*; leer un `NameError` (secciones 3 y 7 del 00) |
+| 5–10 | Abrir la carpeta | VS Code → *File → Open Folder…* → `curso-python-finanzas` → *Trust the authors*. Quien no tenga la carpeta: *Download ZIP* desde el enlace que comparte el profesor |
+| 10–20 | **Entorno y kernel** | Si no hay `.venv`: *Python: Create Environment → Venv → requirements.txt*. Abre `notebooks/00_…`, *Select Kernel → .venv* y ejecuta la celda 🩺. **Comprobación en voz alta:** todos con la 🩺 en ✅ |
+| 20–30 | Notebooks y errores | Ejecutar, *Restart* y *Run All*; guardar con Ctrl+S; leer un `NameError` (secciones 3 y 7 del 00) |
 
 - Las secciones 4–6 y 8 del 00 (calculadora, variables, f-strings y ejercicio de margen) se hacen como calentamiento si sobra tiempo. Si no, quedan como repaso para casa: el bloque 1 de S1 repite esos conceptos.
-- **Por qué una copia del repositorio y no "Guardar una copia en Drive" de cada notebook:** con la copia completa, los notebooks tienen al lado sus datos y funciones, y lo que generan (el Excel y el PDF del cierre en S3) queda guardado en el Drive del alumno. Además, el alumno practica desde el primer día la idea de *repositorio* que se formaliza en S3 (Git en 15 min).
-- **Resultado:** al acabar, cada alumno tiene su carpeta del curso en Drive y sabe abrir cualquier notebook desde ahí.
+- **Por qué la carpeta completa del repositorio:** los notebooks tienen al lado sus datos y funciones, y lo que generan (el Excel y el PDF del cierre en S3) queda en el ordenador del alumno, donde lo abre con su Excel. Además, el alumno practica desde el primer día la idea de *repositorio* que se formaliza en S3 (Git en 15 min).
+- **Quien no consiga instalar** (permisos, proxy…): que siga la sesión en Colab (plan B, enlace del README) y se resuelve con IT antes de S2.
+- **Resultado:** al acabar, cada alumno tiene la carpeta del curso abierta en VS Code con el kernel `.venv` funcionando.
 
 ### S1 · Python para quien viene de Excel — `01_fundamentos_python.ipynb`
 
@@ -72,8 +72,8 @@ Es el primer contacto con los alumnos, así que se hace **en clase y todos a la 
 | Min | Bloque | Contenido |
 |---|---|---|
 | 0–5 | Arranque | Presentación del caso; demo de 2 min del informe final para mostrar adónde vamos |
-| 5–30 | **P0 guiado** | Copia del repositorio en el Drive de cada alumno, abrir desde Drive, ejecutar y leer errores (ver P0) |
-| 30–50 | Tipos y operaciones | Se abre `01` **desde Drive** y se ejecuta la ⚙️. `int`, `float`, `str`, `bool`; cuenta de resultados de una póliza (prima − siniestros − comisión); f-strings con formato de miles y %; por qué `0.1 + 0.2 != 0.3` y `round`/`math.isclose` |
+| 5–30 | **P0 guiado** | Comprobar el entorno en VS Code (carpeta, `.venv`, kernel), ejecutar y leer errores (ver P0) |
+| 30–50 | Tipos y operaciones | Se abre `01` en VS Code y se ejecuta la ⚙️. `int`, `float`, `str`, `bool`; cuenta de resultados de una póliza (prima − siniestros − comisión); f-strings con formato de miles y %; por qué `0.1 + 0.2 != 0.3` y `round`/`math.isclose` |
 | 50–70 | Colecciones y control de flujo | Listas y diccionarios como "filas" de una cartera mini; `for`, `if/elif/else` para clasificar pólizas rentables y no rentables; acumuladores |
 | 70–80 | *Pausa* | |
 | 80–100 | Funciones y módulos | `def margen_tecnico(...)`, valores por defecto y docstrings; `import math`, `datetime`; importar nuestras funciones de `src/`; buenas prácticas (nombres claros, no repetir código, una función hace una cosa) |
@@ -172,10 +172,10 @@ Es el primer contacto con los alumnos, así que se hace **en clase y todos a la 
 
 ## 6. Checklist logístico (antes de la sesión 1)
 
-- [ ] Confirmar con IT que `colab.research.google.com`, `github.com`, `pypi.org` y **Google Drive** son accesibles desde la red corporativa y que cada alumno tiene una cuenta de Google utilizable. Si son cuentas de Google Workspace de la empresa, comprobar que el administrador permite **montar Drive desde Colab** (es lo que hace la celda 📥). **Plan B:** Anaconda o VS Code en local con `requirements.txt`.
+- [ ] Confirmar con IT que los alumnos **pueden instalar** Python 3.12 y VS Code (o que IT los instala) y que `python.org`, `pypi.org`, `files.pythonhosted.org`, `github.com` y el *marketplace* de VS Code (`marketplace.visualstudio.com`) son accesibles desde la red corporativa. Si hay **proxy**, pedir la configuración para `pip`. **Plan B:** Google Colab (requiere `colab.research.google.com` y una cuenta de Google).
 - [ ] Publicar el repositorio en GitHub como **público** (ver README).
-- [ ] Hacer el recorrido del P0 con una **cuenta de Google de prueba sin Colab usado nunca** (como la de un alumno): copia en Drive, abrir desde Drive y ejecutar la ⚙️ del 01.
-- [ ] Ejecutar todos los notebooks en Colab la semana anterior (Colab cambia versiones de librerías sin avisar).
-- [ ] Unos días antes, enviar un correo breve: *traed portátil y cuenta de Google con sesión iniciada en Chrome; el primer día montamos el entorno juntos*. No se pide ninguna tarea previa.
-- [ ] El día 1, tener a mano el enlace *Open in Colab* del 00 para pegarlo en el chat.
-- [ ] Recordar que en Colab **solo se usan datos públicos o simulados**, nunca datos reales de la compañía.
+- [ ] Hacer la puesta en marcha del README en un **portátil corporativo limpio** (como el de un alumno): instalar, descargar el ZIP, crear `.venv`, ejecutar la 🩺 del 00 y la ⚙️ del 01.
+- [ ] Ejecutar `python herramientas/verificar_notebooks.py` la semana anterior.
+- [ ] Una semana antes, enviar un correo con el enlace a la guía *Puesta en marcha del alumno* del README: *instalad Python y VS Code, descargad la carpeta y cread el entorno; si algo falla, no pasa nada, lo resolvemos el primer día*.
+- [ ] El día 1, tener a mano el enlace al repositorio (para el *Download ZIP*) y el enlace de Colab del 00 (plan B) para pegarlos en el chat.
+- [ ] Recordar que en Colab (plan B) **solo se usan datos públicos o simulados**, nunca datos reales de la compañía.

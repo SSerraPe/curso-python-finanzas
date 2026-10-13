@@ -1,7 +1,7 @@
 """Rutas y carga de datos del curso.
 
 Todas las funciones devuelven DataFrames de pandas. Si los ficheros locales no
-existen (p. ej. abriste un notebook suelto en Colab sin clonar el repositorio),
+existen (p. ej. abriste un notebook suelto sin descargar la carpeta del curso),
 `cargar_fremtpl2` intenta descargarlos de OpenML como plan B.
 """
 from __future__ import annotations

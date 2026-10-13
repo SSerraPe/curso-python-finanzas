@@ -1,0 +1,12 @@
+{
+  // Los notebooks se ejecutan desde la raíz del curso (donde están data/ y src/)
+  "jupyter.notebookFileRoot": "${workspaceFolder}",
+  // Usa el entorno .venv del curso en notebooks y terminal
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
+  "python.terminal.activateEnvironment": true,
+  "notebook.lineNumbers": "on",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.ipynb_checkpoints": true
+  }
+}

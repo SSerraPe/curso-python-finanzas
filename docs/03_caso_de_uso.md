@@ -119,8 +119,8 @@ Listado completo en `data/referencia/problemas_introducidos.csv`.
 
 ## 5. Recorrido paso a paso
 
-### Preparación (P0, al inicio de la sesión 1) — `00_preparacion_colab_y_python.ipynb`
-Copiar el repositorio del curso en el Google Drive de cada alumno y abrir los notebooks desde ahí; ejecutar y reiniciar; variables y f-strings; un ejercicio de margen y ratio combinado de una póliza (margen 63,40 €; ratio combinado 89,8 %).
+### Preparación (P0, al inicio de la sesión 1) — `00_preparacion_vscode_y_python.ipynb`
+Comprobar el entorno local (carpeta del curso abierta en VS Code, kernel `.venv` y librerías); ejecutar y reiniciar; variables y f-strings; un ejercicio de margen y ratio combinado de una póliza (margen 63,40 €; ratio combinado 89,8 %).
 
 ### Sesión 1 — `01_fundamentos_python.ipynb`
 1. Cuenta de resultados de una póliza con variables y tipos.

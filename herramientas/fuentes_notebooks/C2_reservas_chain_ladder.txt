@@ -14,7 +14,7 @@
 | 3 | Incertidumbre de la reserva: Mack y bootstrap (paquete `chainladder`) |
 | 4 | Back-test con datos reales: ¿cuánto acertó la reserva? |
 
-> ⚠️ **En Colab**, la primera ejecución de la celda de preparación instala `chainladder` y **reinicia el entorno**. Cuando reconecte, vuelve a ejecutarla y sigue.
+> ⚠️ Si tu entorno aún no tiene `chainladder`, la primera ejecución de la celda de preparación lo instala y te pide **reiniciar el kernel** (botón *Restart* de la barra del notebook). Después, vuelve a ejecutarla y sigue.
 
 #== setup:chainladder
 

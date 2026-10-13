@@ -39,7 +39,7 @@ def ejecutar(ruta: Path, permitir_errores: bool) -> tuple[nbformat.NotebookNode,
 
 def main(patron: str = "") -> int:
     fallos = 0
-    for ruta in sorted((RAIZ / "notebooks" / "soluciones").glob(f"*{patron}*.ipynb")):
+    for ruta in sorted((RAIZ / "notebooks" / "soluciones").glob(f"*{patron}*.ipynb" if patron else "*.ipynb")):
         try:
             nb, dur = ejecutar(ruta, permitir_errores=False)
         except CellExecutionError as e:

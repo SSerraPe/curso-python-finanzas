@@ -7,7 +7,7 @@ Formato de las fuentes
 #== md                 -> empieza una celda markdown
 #== code               -> empieza una celda de código
 #== setup              -> inserta la celda estándar de preparación del entorno
-#== setup:chainladder  -> idem, instalando además chainladder (reinicia Colab)
+#== setup:chainladder  -> idem, instalando además chainladder (pide reiniciar el kernel)
 {{REPO_URL}}          -> se sustituye por REPO_URL (en celdas md y de código)
 
 Dentro de una celda de código:
@@ -31,44 +31,48 @@ DESTINO = RAIZ / "notebooks"
 
 REPO_URL = "https://github.com/SSerraPe/curso-python-finanzas.git"
 
-SETUP = '''# @title ⚙️ Ejecuta esta celda primero (prepara el entorno) { display-mode: "form" }
-import os, sys, subprocess
+SETUP = '''# ⚙️ Ejecuta esta celda primero (prepara el entorno)
+import os, sys, subprocess, importlib.util
 from pathlib import Path
 
 REPO_URL = "{repo}"
-COPIA_DRIVE = Path("/content/drive/MyDrive/curso-python-finanzas")  # la crea el notebook 00
 EN_COLAB = "google.colab" in sys.modules
 
 if EN_COLAB:
-    from google.colab import drive
-    try:
-        drive.mount("/content/drive")
-    except Exception as e:
-        print("⚠️ No se ha podido conectar Google Drive:", e)
-    if COPIA_DRIVE.is_dir():
-        os.chdir(COPIA_DRIVE)
-    else:
-        print("⚠️ No encuentro tu copia del curso en Mi unidad › curso-python-finanzas (ver notebook 00).")
-        print("   Uso una copia TEMPORAL: lo que generes se pierde al cerrar Colab.")
-        if not Path("/content/curso-python-finanzas").exists():
-            subprocess.run(["git", "clone", "-q", "--depth", "1", REPO_URL, "/content/curso-python-finanzas"], check=True)
-        os.chdir("/content/curso-python-finanzas")
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-colab.txt"], check=True){extra}
+    # Plan B: Colab con una copia TEMPORAL del curso (lo que generes se pierde al cerrar)
+    if not Path("/content/curso-python-finanzas").exists():
+        subprocess.run(["git", "clone", "-q", "--depth", "1", REPO_URL, "/content/curso-python-finanzas"], check=True)
+    os.chdir("/content/curso-python-finanzas")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements-colab.txt"], check=True)
+    print("ℹ️ Estás en Colab (plan B): trabajas sobre una copia temporal. Descarga lo que quieras conservar.")
 else:
-    # En tu ordenador: nos situamos en la carpeta raíz del curso (la que tiene data/ y src/)
+    # En tu ordenador (VS Code): nos situamos en la carpeta raíz del curso (la que tiene data/ y src/)
     while not (Path("data").is_dir() and Path("src").is_dir()) and Path.cwd() != Path.cwd().parent:
         os.chdir("..")
+    if not (Path("data").is_dir() and Path("src").is_dir()):
+        raise RuntimeError("No encuentro la carpeta del curso. En VS Code usa File → Open Folder… → curso-python-finanzas")
+    if not Path(sys.prefix).resolve().is_relative_to(Path.cwd().resolve()):
+        print("⚠️ El kernel no es el entorno .venv del curso:", sys.executable)
+        print("   Arriba a la derecha del notebook → Select Kernel → Python Environments → .venv")
+    faltan = [m for m in ("pandas", "openpyxl", "xlsxwriter", "fpdf", "pandera", "statsmodels", "matplotlib", "yaml")
+              if importlib.util.find_spec(m) is None]
+    if faltan:
+        print("⏳ Faltan librerías (" + ", ".join(faltan) + "). Instalando requirements.txt…")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], check=True)
+        print("🔄 Instaladas. Si alguna celda da ModuleNotFoundError, pulsa Restart (barra del notebook) y vuelve a ejecutar esta celda."){extra}
 
 sys.path.insert(0, str(Path("src").resolve()))
 print("✅ Entorno listo. Carpeta de trabajo:", Path.cwd())'''
 
 EXTRA_CHAINLADDER = '''
-    try:
-        import chainladder  # noqa: F401
-    except ImportError:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "chainladder==0.10.1"], check=True)
+try:
+    import chainladder  # noqa: F401
+except ImportError:
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "chainladder==0.10.1"], check=True)
+    if EN_COLAB:
         print("🔄 Se ha instalado chainladder y Colab se reiniciará. Cuando reconecte, VUELVE A EJECUTAR ESTA CELDA.")
-        os.kill(os.getpid(), 9)'''
+        os.kill(os.getpid(), 9)
+    raise SystemExit("🔄 Se ha instalado chainladder. Pulsa Restart (barra del notebook) y VUELVE A EJECUTAR ESTA CELDA.")'''
 
 RE_ALUMNO = re.compile(r"^[ \t]*# >>> ALUMNO\n(.*?)^[ \t]*# <<< ALUMNO\n?", re.S | re.M)
 RE_SOLUCION = re.compile(r"^[ \t]*# >>> SOLUCION\n(.*?)^[ \t]*# <<< SOLUCION\n?", re.S | re.M)
@@ -112,8 +116,7 @@ def construir(fuente: Path) -> None:
     for alumno in (True, False):
         nb = nbf.v4.new_notebook()
         nb.metadata = {"kernelspec": {"name": "python3", "display_name": "Python 3"},
-                       "language_info": {"name": "python"},
-                       "colab": {"provenance": [], "toc_visible": True}}
+                       "language_info": {"name": "python"}}
         for tipo, contenido in celdas:
             if tipo == "md":
                 contenido = contenido.replace("{{REPO_URL}}", REPO_URL)

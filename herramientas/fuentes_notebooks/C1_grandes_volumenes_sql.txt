@@ -272,7 +272,7 @@ comprobar(lambda: len(sin_grandes), int(((_s["importe"] > 100_000) & (_s["canal"
           "WHERE importe > :umbral AND canal = :canal, con params={'umbral': 100000, 'canal': 'Agentes'}")
 
 #== md
-### Conexión a SQL Server en la empresa (no ejecutable en Colab)
+### Conexión a SQL Server en la empresa (requiere la red y los drivers corporativos)
 ```python
 # pip install pyodbc   (y el "ODBC Driver 18 for SQL Server" instalado por IT)
 from sqlalchemy import create_engine
@@ -318,7 +318,7 @@ print(ddf.groupby("canal")["prima_anual"].sum().compute())
 print(f"{time.perf_counter() - t:.2f} s")
 
 #== md
-**PySpark** (solo como referencia; requiere Java y es pesado para Colab):
+**PySpark** (solo como referencia; requiere Java y es pesado para un portátil):
 ```python
 from pyspark.sql import SparkSession, functions as F
 spark = SparkSession.builder.appName("cartera").getOrCreate()

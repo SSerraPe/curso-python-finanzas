@@ -24,7 +24,9 @@ Notas de apoyo para impartir cada sesión. Para cada bloque se indica **qué exp
 
 ## 0. Entorno y compatibilidad
 
-**Colab, octubre de 2026** (ver informe de investigación): runtime con Python 3.12–3.13, **pandas 2.2**, numpy 2.x, statsmodels 0.14–0.15, scikit-learn, matplotlib, seaborn, plotly 5.x, duckdb 1.3, polars 1.x, dask y SQLAlchemy 2.x preinstalados. **No** vienen XlsxWriter, fpdf2 ni pandera. Los instala `requirements-colab.txt` desde la celda de arranque.
+**Entorno principal: VS Code en local** con Python 3.12 y un `.venv` creado desde `requirements.txt` (pandas 2.2 o 3.0, numpy 2.x, statsmodels, scikit-learn, matplotlib, seaborn, plotly, duckdb, polars, dask, SQLAlchemy, XlsxWriter, fpdf2, pandera, `ipykernel`). `.vscode/settings.json` hace que los notebooks se ejecuten desde la raíz del curso y propone el `.venv` como intérprete. `.vscode/extensions.json` recomienda las extensiones Python y Jupyter.
+
+**Plan B: Colab** (octubre de 2026): Python 3.12–3.13 y **pandas 2.2**, con casi todo preinstalado. **No** vienen XlsxWriter, fpdf2 ni pandera, que instala `requirements-colab.txt` desde la celda de arranque.
 
 **pandas 3.0** (enero de 2026) ya es la versión estable en PyPI. Todo el código del curso funciona en **pandas 2.2 y 3.0**. Reglas que seguimos y que conviene explicar cuando surjan:
 
@@ -37,42 +39,41 @@ Notas de apoyo para impartir cada sesión. Para cada bloque se indica **qué exp
 | `dtype == object` para detectar texto | `pd.api.types.is_string_dtype` | En pandas 3 el texto es `str` por defecto |
 | `freq="M"` | `freq="ME"` | Alias renombrados |
 
-**`chainladder` 0.10.1** exige pandas ≥ 2.3.3: al instalarlo, Colab actualiza pandas y **hay que reiniciar** el entorno. La celda de arranque de C2 lo hace sola: instala, reinicia, y el alumno vuelve a ejecutar la celda.
+**`chainladder` 0.10.1** exige pandas ≥ 2.3.3 y viene en `requirements.txt`. Si aun así falta (o en Colab), la celda de arranque de C2 lo instala en el kernel actual y pide **reiniciar el kernel** (*Restart*). En Colab reinicia el entorno ella sola. En ambos casos, el alumno vuelve a ejecutar la celda.
 
-**Gobernanza:** en Colab se usan **solo** datos públicos o simulados. Si IT bloquea Colab, el plan B es Anaconda o VS Code en local con `requirements.txt`. Los notebooks detectan si están en Colab o en local y funcionan en ambos.
+**Gobernanza:** en Colab (plan B) se usan **solo** datos públicos o simulados. Los notebooks detectan si están en Colab o en local y funcionan en ambos.
 
-**Antes del curso:** ejecuta `python herramientas/verificar_notebooks.py` (en local) **y** abre y ejecuta cada notebook en Colab la semana anterior.
+**Antes del curso:** ejecuta `python herramientas/verificar_notebooks.py` y haz la puesta en marcha del README en un portátil corporativo limpio la semana anterior.
 
-### La copia del curso en el Drive de cada alumno
+### La carpeta del curso en el ordenador de cada alumno
 
-GitHub es la fuente de **solo lectura**. El primer día (P0, al inicio de S1) cada alumno **copia el repositorio entero en su Google Drive** (`Mi unidad › curso-python-finanzas`) y a partir de ahí abre siempre los notebooks desde su Drive. Así se resuelven tres problemas a la vez: el trabajo del alumno no se pierde, los notebooks tienen al lado sus datos y su `src/`, y lo que generan (el Excel y el PDF de S3) queda guardado.
+GitHub es la fuente de **solo lectura**. Antes de S1, cada alumno **descarga el repositorio entero** (*Download ZIP* o `git clone`), lo abre en VS Code y crea su `.venv` (guía en el README). A partir de ahí trabaja siempre en esa carpeta: su trabajo se guarda en su disco, los notebooks tienen al lado sus datos y su `src/`, y lo que generan (el Excel y el PDF de S3) lo abre directamente con su Excel.
 
 | Celda | Dónde | Qué hace |
 |---|---|---|
-| 📥 Copia el curso | notebook 00, sección 2 | Monta Drive, clona el repositorio en `/content` (`--depth 1`) y copia **todo menos `.git`** a `MyDrive/curso-python-finanzas`. Si la carpeta ya existe, **no toca nada** |
-| ⚙️ Prepara el entorno | primera celda de 01–05, C1 y C2 | Monta Drive y se sitúa en la copia del alumno. Si no la encuentra, avisa y clona una copia **temporal** en `/content` para no bloquear la clase. Instala `requirements-colab.txt` |
-| 🔄 Actualizar mi copia | notebook 00, sección 9 | Descarga la última versión y sobrescribe `config/`, `data/`, `docs/`, `herramientas/`, `scripts/`, `src/`, `notebooks/soluciones/` y los requirements. Añade los notebooks que falten. **Nunca sobrescribe un notebook de alumno que ya exista** |
+| 🩺 Comprobación del entorno | notebook 00, sección 2 | Muestra la versión de Python, si encuentra la carpeta del curso, si el kernel es el `.venv` y la versión de cada librería clave (✅/❌) |
+| ⚙️ Prepara el entorno | primera celda de 01–05, C1 y C2 | Sube hasta la raíz del curso (la carpeta con `data/` y `src/`) y añade `src/` al `sys.path`. Avisa si el kernel no es el `.venv`. Si falta una librería, instala `requirements.txt` con el Python del kernel. En Colab clona una copia **temporal** e instala `requirements-colab.txt` |
+| 🔄 Actualizar mi copia | notebook 00, sección 9 | Para quien usó el ZIP: desde la carpeta de un ZIP nuevo, sobrescribe `config/`, `data/`, `docs/`, `herramientas/`, `scripts/`, `src/`, `notebooks/soluciones/`, `.vscode/` y los requirements. Añade los notebooks que falten. **Nunca sobrescribe un notebook de alumno que ya exista**. Quien usó Git: `git pull` |
 
-- **Por qué no se usa Git dentro de Drive:** Git sobre el disco montado de Drive es lento y a veces deja el repositorio a medias. Clonar en `/content` y copiar es más robusto, y la actualización no necesita `.git`.
-- **Por qué no un *fork* en GitHub:** obliga a que cada alumno tenga cuenta de GitHub y no resuelve dónde se guarda su trabajo en Colab. El *fork* y el *pull request* se explican en S3 (Git en 15 min), cuando ya tiene sentido.
-- **Si corriges algo a mitad de curso:** `git push` y pide que ejecuten la celda 🔄. Si el cambio es en un notebook de alumno, la celda 🔄 no lo pisa. Diles que abran la versión nueva desde GitHub (*Open in Colab*) o que borren su notebook antes de pulsar 🔄.
-- La ruta `MyDrive` es la misma aunque Drive esté en español (*Mi unidad*).
+- **Por qué ZIP por defecto:** no exige instalar Git ni tener cuenta de GitHub. Quien ya tiene Git usa `git clone` y actualiza con `git pull`. El *fork* y el *pull request* se explican en S3 (Git en 15 min).
+- **Si corriges algo a mitad de curso:** `git push` y pide `git pull` o la celda 🔄. Si el cambio es en un notebook de alumno, ni la 🔄 lo pisa ni `git pull` lo fusiona si el alumno lo ha editado: que renombre el suyo (p. ej. `…_mio.ipynb`) y copie el nuevo.
 
 ---
 
 ## S1. Fundamentos de Python
 
-### P0 guiado (minutos 5–30) · La copia del curso
-- **Proyecta tu pantalla con una cuenta "de alumno"** (no la tuya de profesor), para que lo que ven coincida con lo que tú ves.
-- Pega en el chat el enlace *Open in Colab* del 00 y avanzad **paso a paso, esperando a todos**: post-it verde cuando la celda 📥 diga ✅.
-- **Ventanas que van a salir** (avísalas antes): *"Este notebook no es de Google"* → *Ejecutar de todos modos*; *"¿Permitir acceso a Google Drive?"* → *Conectar* → elegir cuenta → *Permitir*. Si alguien desmarca permisos en la pantalla de Google, el montaje falla: repetir y aceptarlos todos.
-- **Comprobación clave:** cuando todos hayan abierto su copia, pregunta *"¿alguien ve el botón «Copiar en Drive» arriba?"*. Quien lo vea sigue en la versión de GitHub y sus cambios se perderán.
+### P0 guiado (minutos 5–30) · El entorno en VS Code
+- **Proyecta tu pantalla en un portátil "de alumno"** (Windows, usuario corporativo), para que lo que ven coincida con lo que tú ves.
+- La instalación se pidió por correo. En clase se **comprueba**: todos abren la carpeta en VS Code y el 00, eligen el kernel `.venv` y ejecutan la 🩺. Post-it verde cuando sale todo ✅. Mientras, rescata a quien no lo tenga.
+- **Ventanas que van a salir** (avísalas antes): *"Do you trust the authors of the files in this folder?"* → *Yes, I trust the authors*; *"This workspace has extension recommendations"* → *Install*; *Select Kernel* → *Python Environments* → `.venv`.
 - **Problemas típicos:**
-  - *"Abrir con" no muestra Colab* en drive.google.com → usar *Archivo → Abrir cuaderno → Google Drive* desde Colab (siempre funciona).
-  - *Cuenta corporativa que bloquea Drive en Colab* → que use una cuenta personal de Google (los datos son públicos o simulados) o el plan B en local.
-  - *Ha ejecutado la 📥 dos veces* → no pasa nada, la segunda no toca la copia.
-  - *Ha movido o renombrado la carpeta* → devolverla a *Mi unidad* con el nombre `curso-python-finanzas`. Si la ha estropeado: renombrarla (p. ej. `…_viejo`) y volver a ejecutar la 📥.
-- **Mensaje:** *"GitHub es el original del profesor; vuestra carpeta de Drive es vuestro cuaderno. En S3 veremos que esto mismo, con control de versiones, es Git."*
+  - *El kernel no es `.venv`* (la 🩺 o la ⚙️ avisan) → *Select Kernel → Python Environments → .venv*. Si `.venv` no aparece: *Developer: Reload Window* (Ctrl+Shift+P) o crearlo con *Python: Create Environment*.
+  - *`python` no se reconoce* (Windows) → no se marcó *Add to PATH*: reinstalar marcándolo. Si abre la Microsoft Store: *Configuración → Aplicaciones → Alias de ejecución de aplicaciones* → desactivar `python.exe` y `python3.exe`. También funciona `py -3.12 -m venv .venv`.
+  - *PowerShell no deja ejecutar `Activate.ps1`* → `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, o usar la terminal *Command Prompt*, o no activar nada: el kernel `.venv` del notebook basta.
+  - *`pip install` falla por red* → proxy corporativo: `pip install --proxy http://usuario@proxy:puerto -r requirements.txt` (pedir el dato a IT).
+  - *La ⚙️ dice que no encuentra la carpeta del curso* → se abrió en VS Code una carpeta por encima (p. ej. `Descargas` o `curso-python-finanzas-main/curso-python-finanzas-main`): *File → Open Folder…* la que contiene `data/` y `src/` directamente.
+  - *No tiene permisos para instalar* → sigue en Colab (plan B, enlace del README) y se resuelve con IT antes de S2.
+- **Mensaje:** *"GitHub es el original del profesor; vuestra carpeta es vuestro cuaderno. En S3 veremos que esto mismo, con control de versiones, es Git."*
 
 ### Bloque 1 · Tipos y operaciones
 - **Tipado dinámico**: el tipo lo lleva el valor, no la variable. `type()` para inspeccionar.
@@ -201,9 +202,9 @@ Principios: **idempotencia** (ejecutarlo dos veces da lo mismo), **trazabilidad*
 
 ### Salidas
 - **XlsxWriter** (para crear libros nuevos): `workbook.add_format({"num_format": '#,##0 "€";[Red]-#,##0 "€"'})`, `set_column`, `freeze_panes`, `autofilter`, `conditional_format` (semáforos) y `add_chart` (gráficos **nativos** de Excel, que el destinatario puede editar). **openpyxl** sirve para *modificar* una plantilla corporativa existente. **xlwings** necesita Excel instalado, así que no funciona en Colab.
-- **fpdf2**: Python puro, ideal para Colab. ⚠️ Las fuentes estándar del PDF no tienen el **€**, así que se registra una TTF (DejaVu viene con matplotlib: `matplotlib.get_data_path()/fonts/ttf`). Tablas con `pdf.table()` e imágenes PNG de matplotlib. Alternativa para informes complejos: plantilla HTML + Jinja2 + WeasyPrint.
+- **fpdf2**: Python puro, sin dependencias del sistema. ⚠️ Las fuentes estándar del PDF no tienen el **€**, así que se registra una TTF (DejaVu viene con matplotlib: `matplotlib.get_data_path()/fonts/ttf`). Tablas con `pdf.table()` e imágenes PNG de matplotlib. Alternativa para informes complejos: plantilla HTML + Jinja2 + WeasyPrint.
 - **Correo**: `email.message.EmailMessage` + `add_attachment`; `bytes(msg)` → fichero `.eml` (Outlook lo abre). **Siempre en modo simulacro primero.**
-  - Desde Colab no se puede enviar: Google Cloud bloquea el puerto 25 saliente.
+  - Desde Colab (plan B) no se puede enviar: Google Cloud bloquea el puerto 25 saliente.
   - En la empresa: **Microsoft Graph** (`sendMail`, OAuth) o Outlook con `win32com` (Windows). Microsoft está retirando la autenticación básica SMTP en Exchange Online (según fuente secundaria, desactivada por defecto a finales de 2026; conviene confirmarlo con IT).
 
 ### Del notebook al script
@@ -376,11 +377,12 @@ Es el ejemplo de manual de **variables de confusión**: el análisis variable a 
 ## Preguntas frecuentes de los alumnos
 
 - **"¿Por qué no lo hago en Excel/Power Query?"** Power Query es estupendo para transformar datos. Python añade estadística, modelos, automatización completa (PDF, correos, programación), control de versiones y escala. Además, conviven: Python genera el Excel final.
-- **"¿Puedo usar esto con los datos de la empresa?"** En Colab, **no**. En local (Anaconda/VS Code), con las herramientas aprobadas por IT, sí.
+- **"¿Puedo usar esto con los datos de la empresa?"** En Colab, **no**. En local (VS Code), con las herramientas y los permisos aprobados por IT, sí.
 - **"Me sale `ModuleNotFoundError: curso_seguros`."** No se ha ejecutado la celda ⚙️ de preparación (o se reinició la sesión). Hay que ejecutarla de nuevo.
-- **"La celda ⚙️ dice que no encuentra mi copia y usa una temporal."** O no se ha hecho la copia (celda 📥 del notebook 00), o la carpeta no está en *Mi unidad* con el nombre `curso-python-finanzas`, o no se aceptó el permiso de Drive. Mientras tanto se puede seguir la clase, pero lo que se genere se perderá al cerrar.
-- **"He perdido lo que hice en el ejercicio."** Seguramente trabajaba en la versión de GitHub (se ve el botón *Copiar en Drive*). A partir de ahora, abrir siempre desde Drive.
-- **"¿Tengo que volver a copiar el curso cada sesión?"** No. La copia se hace una vez. Cada sesión basta con abrir el notebook desde Drive y ejecutar la ⚙️.
+- **"La celda ⚙️ dice que no encuentra la carpeta del curso."** En VS Code está abierta otra carpeta (una por encima, o la doble `curso-python-finanzas-main` del ZIP). *File → Open Folder…* → la que contiene `data/` y `src/`.
+- **"La ⚙️ avisa de que el kernel no es el .venv" / `ModuleNotFoundError`.** Arriba a la derecha: *Select Kernel → Python Environments → .venv*. Si la ⚙️ acaba de instalar librerías, pulsar *Restart* y volver a ejecutarla.
+- **"He perdido lo que hice en el ejercicio."** VS Code no guarda solo: el punto en la pestaña del notebook indica cambios sin guardar. Ctrl+S, o activar *File → Auto Save*.
+- **"¿Tengo que volver a instalar cada sesión?"** No. La instalación se hace una vez. Cada sesión basta con abrir la carpeta en VS Code, el notebook, y ejecutar la ⚙️.
 - **"Me sale `FileNotFoundError`."** Lo mismo: la carpeta de trabajo no es la raíz del curso.
 - **"¿Por qué mi resultado no coincide exactamente con la solución?"** Las celdas de comprobación toleran pequeñas diferencias de decimales; si sale ❌, la pista indica el error conceptual más probable (normalmente, media de ratios frente a cociente de sumas).
 - **"¿Cuándo uso pandas, DuckDB o Polars?"** pandas por defecto. DuckDB si se piensa en SQL o los datos no caben en memoria. Polars si se quiere máxima velocidad con sintaxis de DataFrame.
